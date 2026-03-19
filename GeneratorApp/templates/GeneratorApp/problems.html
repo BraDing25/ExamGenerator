@@ -1,0 +1,66 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{% static 'GeneratorApp/main.css' %}">
+    <script src="{% static 'GeneratorApp/main.js' %}" defer></script>
+    <title>Physics Exam Generator - UCF</title>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+    <div>
+        <header>
+            <div class="container">
+                <div class="header-brand">
+                    <img class="header-logo" src="{% static 'GeneratorApp/images/shared/TheTab_KGrgb_72ppi.png' %}" alt="UCF logo">
+                    <div class="header-text">
+                        <h1>Physics Exam Generator</h1>
+                        <p>Automated exam creation tool for physics educators</p>
+                    </div>
+                </div>
+            </div>
+        </header>
+        <nav>
+            <div class="container">
+                <a href="{% url 'home' %}">Home</a>
+                <a href="{% url 'problems' %}">Problem Sets</a>
+                <a href="{% url 'generator' %}">Generator</a>
+            </div>
+        </nav>
+    </div>
+
+    <div class="container" style="margin-top: 40px; height: calc(100vh - 276px); overflow-y: auto;" id="classes">
+        <h2>Problem Sets</h2>
+        <div style="display: flex; flex-direction: row; flex-wrap: wrap;" id="problem-classes"></div>
+    </div>
+
+    <div id="problem-class-pages" style="display: none;"></div>
+
+    <div class="problem-modal-overlay" id="problem-modal-overlay" aria-hidden="true">
+        <div class="problem-modal" role="dialog" aria-modal="true" aria-labelledby="problem-modal-title">
+            <button class="problem-modal-close" id="problem-modal-close" aria-label="Close problem description">&times;</button>
+            <h3 id="problem-modal-title">Problem</h3>
+            <p id="problem-modal-description"></p>
+            <h4>Example:</h4>
+            <p id="problem-modal-example"></p>
+            <img id="problem-modal-figure" alt="Problem figure" />
+        </div>
+    </div>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 Physics Exam Generator. University of Central Florida | <span id="last-sync-footer">Last Sync: Loading...</span></p>
+        </div>
+    </footer>
+</body>
+</html>
