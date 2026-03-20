@@ -150,27 +150,33 @@ Then test website:
 - Try Preview Exam
 - Try Generate Exam
 
-## 8) Redeploy updates (routine)
-After uploading new code:
+## 8) Redeploy updates (routine, direct edits on PythonAnywhere)
+If you edit files directly on PythonAnywhere (Files tab), you usually do not need to re-upload the project.
+
+Run this in PythonAnywhere Bash after your edits:
 
 ```bash
 workon examgen-env
 cd ~/ExamGenerator
 
+# Only needed if dependencies changed
 pip install -r requirements.txt
+
+# Only needed if models changed
 python manage.py migrate
 
-# Use fresh staticfiles approach to avoid permission carry-over
+# Rebuild static files if CSS/JS/templates/static assets changed
 mv staticfiles staticfiles_old_$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
 mkdir -p staticfiles
 chmod -R u+rwX staticfiles
 python manage.py collectstatic --noinput
 
+# Good final checks
 python manage.py check --deploy
 python manage.py sync_problem_bank
 ```
 
-Then click Reload in Web tab.
+Then click Reload in the Web tab.
 
 ## 9) Error quick fixes
 

@@ -31,6 +31,9 @@ def string_to_latex(string):
     if string is None:
         return ""
     string = str(string)
+    string = string.replace("&lt;", "<").replace("&gt;", ">")
+    string = string.replace("&le;", "≤").replace("&ge;", "≥")
+    string = string.replace("&ne;", "≠").replace("&plusmn;", "±")
     string = string.replace("<latex>", "$").replace("</latex>", "$")
     string = string.replace("<ul>", "").replace("</ul>", "")
     string = string.replace("<li>", "• ").replace("</li>", "\n")

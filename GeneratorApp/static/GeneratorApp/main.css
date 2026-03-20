@@ -157,6 +157,16 @@ footer {
     color: var(--ucf-black);
 }
 
+.select-button.is-busy,
+.select-button.is-busy:hover,
+.select-button.is-busy:active,
+.select-button.is-busy:disabled {
+    background-color: #FFB81C;
+    color: var(--ucf-black);
+    opacity: 1;
+    cursor: wait;
+}
+
 .back {
     background-color: #f0f0f0;
     color: #333;

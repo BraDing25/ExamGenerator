@@ -221,6 +221,12 @@ def _latex_strip_html(value):
 
 def _safe_latex_text(value):
     text = _latex_strip_html(value)
+    text = text.replace("<", r"\textless{}")
+    text = text.replace(">", r"\textgreater{}")
+    text = text.replace("≤", r"$\leq$")
+    text = text.replace("≥", r"$\geq$")
+    text = text.replace("≠", r"$\neq$")
+    text = text.replace("±", r"$\pm$")
     # Keep percent signs from breaking LaTeX text mode.
     text = text.replace("%", r"\%")
     text = _escape_latex_underscores_outside_math(text)
@@ -495,6 +501,7 @@ def build_exam_zip(repo_root, selections, exam_count, output_zip_path):
             exam_dir = working_root / f"exam_{exam_number:02d}"
             exam_dir.mkdir(parents=True, exist_ok=True)
             archive_folder = exam_dir.name
+            exam_prefix = f"exam{exam_number:02d}"
 
             tex_path = _render_exam_tex(exam_number, questions, repo_root, exam_dir)
             pdf_path = _compile_tex_to_pdf(tex_path)
@@ -502,9 +509,9 @@ def build_exam_zip(repo_root, selections, exam_count, output_zip_path):
             answer_key_pdf_path = _compile_tex_to_pdf(answer_key_tex_path)
 
             archive.write(tex_path, arcname=f"{archive_folder}/{tex_path.name}")
-            archive.write(pdf_path, arcname=f"{archive_folder}/{pdf_path.name}")
+            archive.write(pdf_path, arcname=f"{archive_folder}/{exam_prefix}_preview.pdf")
             archive.write(answer_key_tex_path, arcname=f"{archive_folder}/{answer_key_tex_path.name}")
-            archive.write(answer_key_pdf_path, arcname=f"{archive_folder}/{answer_key_pdf_path.name}")
+            archive.write(answer_key_pdf_path, arcname=f"{archive_folder}/{exam_prefix}_answer_key_preview.pdf")
 
         shutil.rmtree(working_root, ignore_errors=True)
 

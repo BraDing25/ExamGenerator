@@ -42,6 +42,31 @@ function selectFirstUnit(cls) {
 }
 
 let cachedCatalog = null;
+let buttonLockState = null;
+
+function lockAllButtons() {
+  if (buttonLockState) {
+    return;
+  }
+
+  buttonLockState = new Map();
+  const buttons = document.querySelectorAll('button');
+  buttons.forEach(function (btn) {
+    buttonLockState.set(btn, btn.disabled);
+    btn.disabled = true;
+  });
+}
+
+function unlockAllButtons() {
+  if (!buttonLockState) {
+    return;
+  }
+
+  buttonLockState.forEach(function (wasDisabled, btn) {
+    btn.disabled = wasDisabled;
+  });
+  buttonLockState = null;
+}
 
 async function getCatalogData() {
   if (cachedCatalog) {
@@ -138,7 +163,8 @@ async function handleGenerateExamClick() {
   }
 
   const previousLabel = button.textContent;
-  button.disabled = true;
+  lockAllButtons();
+  button.classList.add('is-busy');
   button.textContent = 'Generating...';
 
   try {
@@ -184,8 +210,9 @@ async function handleGenerateExamClick() {
     console.error('Exam generation error:', error);
     alert(error.message || 'Unable to generate exams right now.');
   } finally {
-    button.disabled = false;
+    button.classList.remove('is-busy');
     button.textContent = previousLabel;
+    unlockAllButtons();
   }
 }
 

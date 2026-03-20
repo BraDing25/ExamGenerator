@@ -21,6 +21,7 @@ TEXT_EXTENSIONS = (
     ".csv", ".md", ".txt", ".yaml", ".yml", ".json", ".py", ".js", ".css", ".html", ".xml", ".tex",
 )
 EXCLUDED_PATH_TOKEN_PATTERN = re.compile(r"(^|[-_\s])(old|archive|draft|prompt|prompts|oldfiles|old_files)($|[-_\s])", re.IGNORECASE)
+QUESTION_ENTRY_PATTERN = re.compile(r"^\s*-\s*[A-Za-z_][\w-]*\s*:\s*$", re.MULTILINE)
 
 
 @dataclass
@@ -95,10 +96,41 @@ class GitHubProblemBankSyncService:
         try:
             parsed = yaml.safe_load(content) or {}
         except yaml.YAMLError:
-            return None
+            return self._fallback_yaml_metadata(content)
         if not isinstance(parsed, dict):
-            return None
+            return self._fallback_yaml_metadata(content)
         return parsed
+
+    def _fallback_yaml_metadata(self, content):
+        if not content:
+            return None
+
+        title_match = re.search(r"^\s*title\s*:\s*(.+?)\s*$", content, flags=re.MULTILINE)
+        bank_id_match = re.search(r"^\s*bank_id\s*:\s*(.+?)\s*$", content, flags=re.MULTILINE)
+        if not title_match or not bank_id_match:
+            return None
+
+        title = title_match.group(1).split("#", 1)[0].strip(" '\"\t")
+        bank_id = bank_id_match.group(1).split("#", 1)[0].strip(" '\"\t")
+        if not title or not bank_id:
+            return None
+
+        questions_anchor = re.search(r"^\s*questions\s*:\s*$", content, flags=re.MULTILINE)
+        if not questions_anchor:
+            return None
+
+        questions_tail = content[questions_anchor.end():]
+        question_count = len(QUESTION_ENTRY_PATTERN.findall(questions_tail))
+        if question_count <= 0:
+            return None
+
+        return {
+            "bank_info": {
+                "title": title,
+                "bank_id": bank_id,
+            },
+            "questions": [{} for _ in range(question_count)],
+        }
 
     def _is_excluded_path(self, path):
         parts = path.split("/")
@@ -126,31 +158,85 @@ class GitHubProblemBankSyncService:
             return False
 
         path_parts = path.split("/")
-        if len(path_parts) < 4:
-            return False
-
-        # Enforce canonical completed-bank file layout:
-        # <class>/<unit>/<problem_folder>/<problem_folder>.yaml
-        problem_folder = path_parts[-2]
-        file_name = path_parts[-1]
-        file_stem = file_name.rsplit(".", 1)[0]
-        if file_stem != problem_folder:
+        # Only accept the canonical depth: <class>/<unit>/<problem_folder>/<problem_file>.yaml
+        # This prevents syncing backup/history YAMLs inside nested subfolders.
+        if len(path_parts) != 4:
             return False
 
         return True
 
-    def _extract_first_question_payload(self, parsed_yaml):
+    def _iter_question_payloads(self, parsed_yaml):
         questions = parsed_yaml.get("questions", []) if isinstance(parsed_yaml, dict) else []
         if not isinstance(questions, list) or not questions:
-            return {}
-        first_question = questions[0]
-        if not isinstance(first_question, dict):
-            return {}
-        if len(first_question) == 1:
-            first_value = next(iter(first_question.values()))
-            if isinstance(first_value, dict):
-                return first_value
-        return first_question
+            return []
+
+        payloads = []
+        for question in questions:
+            if not isinstance(question, dict):
+                continue
+            if len(question) == 1:
+                first_value = next(iter(question.values()))
+                if isinstance(first_value, dict):
+                    payloads.append(first_value)
+                    continue
+            payloads.append(question)
+        return payloads
+
+    def _resolve_figure_path(self, yaml_path, figure_ref):
+        raw_ref = str(figure_ref or "").strip()
+        if not raw_ref:
+            return ""
+
+        markdown_match = re.search(r"!\[[^\]]*\]\(([^)]+)\)", raw_ref)
+        if markdown_match:
+            raw_ref = markdown_match.group(1).strip()
+
+        img_src_match = re.search(r"src\s*=\s*[\"']([^\"']+)[\"']", raw_ref, flags=re.IGNORECASE)
+        if img_src_match:
+            raw_ref = img_src_match.group(1).strip()
+
+        if raw_ref.startswith(("http://", "https://")):
+            return ""
+
+        normalized = raw_ref.strip("\"'").replace("\\", "/")
+        normalized = normalized.lstrip("/")
+        if normalized.startswith("./"):
+            normalized = normalized[2:]
+
+        base_dir = posixpath.dirname(yaml_path)
+        candidates = []
+
+        direct = posixpath.normpath(posixpath.join(base_dir, normalized))
+        candidates.append(direct)
+
+        if "/" not in normalized:
+            for folder in ("Figures", "Figure", "figure_folder", "figures", "figure", "images", "Images"):
+                candidates.append(posixpath.normpath(posixpath.join(base_dir, folder, normalized)))
+
+        for source, replacement in (
+            ("/figure_folder/", "/Figures/"),
+            ("/figure_folder/", "/Figure/"),
+            ("/Figure/", "/Figures/"),
+            ("/figures/", "/Figures/"),
+            ("/figure/", "/Figure/"),
+        ):
+            if source in direct:
+                candidates.append(direct.replace(source, replacement))
+
+        seen = set()
+        deduped = []
+        for candidate in candidates:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            deduped.append(candidate)
+
+        for candidate in deduped:
+            candidate_file = self.local_repo.joinpath(*candidate.split("/"))
+            if candidate_file.is_file():
+                return candidate
+
+        return deduped[0] if deduped else ""
 
     def _build_modal_payload(self, parsed_yaml, yaml_path):
         payload = {"description": "", "example": "", "figure_path": ""}
@@ -162,16 +248,20 @@ class GitHubProblemBankSyncService:
             description_value = bank_info.get("description", "")
             payload["description"] = str(description_value).strip() if description_value is not None else ""
 
-        first_payload = self._extract_first_question_payload(parsed_yaml)
-        if isinstance(first_payload, dict):
-            example_source = str(first_payload.get("text") or first_payload.get("title") or "").strip()
-            payload["example"] = string_to_latex(example_source)
+        question_payloads = self._iter_question_payloads(parsed_yaml)
+        for question_payload in question_payloads:
+            if payload["example"] == "":
+                example_source = str(question_payload.get("text") or question_payload.get("title") or "").strip()
+                if example_source:
+                    payload["example"] = string_to_latex(example_source)
 
-            figure_ref = first_payload.get("figure")
-            if isinstance(figure_ref, str) and figure_ref.strip():
-                normalized = figure_ref.strip().replace("\\", "/")
-                base_dir = posixpath.dirname(yaml_path)
-                payload["figure_path"] = posixpath.normpath(posixpath.join(base_dir, normalized))
+            if payload["figure_path"] == "":
+                figure_ref = question_payload.get("figure")
+                if isinstance(figure_ref, str) and figure_ref.strip():
+                    payload["figure_path"] = self._resolve_figure_path(yaml_path, figure_ref)
+
+            if payload["example"] and payload["figure_path"]:
+                break
 
         return payload
 

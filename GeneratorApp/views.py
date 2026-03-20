@@ -1,5 +1,6 @@
 import posixpath
 import json
+import re
 import tempfile
 from pathlib import Path
 from urllib.parse import quote
@@ -22,21 +23,82 @@ _MODAL_DATA_BY_SHA = {}
 _MODAL_CACHE_KEY = None
 
 
-def _extract_first_question_payload(parsed_yaml):
+def _resolve_figure_path(yaml_path, figure_ref, repo_root):
+	raw_ref = str(figure_ref or "").strip()
+	if not raw_ref:
+		return ""
+
+	markdown_match = re.search(r"!\[[^\]]*\]\(([^)]+)\)", raw_ref)
+	if markdown_match:
+		raw_ref = markdown_match.group(1).strip()
+
+	img_src_match = re.search(r"src\s*=\s*[\"']([^\"']+)[\"']", raw_ref, flags=re.IGNORECASE)
+	if img_src_match:
+		raw_ref = img_src_match.group(1).strip()
+
+	if raw_ref.startswith(("http://", "https://")):
+		return ""
+
+	normalized = raw_ref.strip("\"'").replace("\\", "/")
+	normalized = normalized.lstrip("/")
+	if normalized.startswith("./"):
+		normalized = normalized[2:]
+
+	base_dir = posixpath.dirname(yaml_path)
+	candidates = []
+	direct = posixpath.normpath(posixpath.join(base_dir, normalized))
+	candidates.append(direct)
+
+	if "/" not in normalized:
+		for folder in ("Figures", "Figure", "figure_folder", "figures", "figure", "images", "Images"):
+			candidates.append(posixpath.normpath(posixpath.join(base_dir, folder, normalized)))
+
+	for source, replacement in (
+		("/figure_folder/", "/Figures/"),
+		("/figure_folder/", "/Figure/"),
+		("/Figure/", "/Figures/"),
+		("/figures/", "/Figures/"),
+		("/figure/", "/Figure/"),
+	):
+		if source in direct:
+			candidates.append(direct.replace(source, replacement))
+
+	seen = set()
+	for candidate in candidates:
+		if candidate in seen:
+			continue
+		seen.add(candidate)
+		if repo_root.joinpath(*candidate.split("/")).is_file():
+			return candidate
+
+	return direct
+
+
+def _figure_exists(repo_root, figure_path):
+	if not figure_path:
+		return False
+	return repo_root.joinpath(*str(figure_path).split("/")).is_file()
+
+
+def _iter_question_payloads(parsed_yaml):
 	questions = parsed_yaml.get("questions", []) if isinstance(parsed_yaml, dict) else []
 	if not isinstance(questions, list) or not questions:
-		return {}
-	first_question = questions[0]
-	if not isinstance(first_question, dict):
-		return {}
-	if len(first_question) == 1:
-		first_value = next(iter(first_question.values()))
-		if isinstance(first_value, dict):
-			return first_value
-	return first_question
+		return []
+
+	payloads = []
+	for question in questions:
+		if not isinstance(question, dict):
+			continue
+		if len(question) == 1:
+			first_value = next(iter(question.values()))
+			if isinstance(first_value, dict):
+				payloads.append(first_value)
+				continue
+		payloads.append(question)
+	return payloads
 
 
-def _parse_problem_modal_data(yaml_content, yaml_path):
+def _parse_problem_modal_data(yaml_content, yaml_path, repo_root):
 	default_payload = {"description": "", "example": "", "figure_path": ""}
 	if not yaml_content:
 		return default_payload
@@ -55,19 +117,21 @@ def _parse_problem_modal_data(yaml_content, yaml_path):
 		description_value = bank_info.get("description", "")
 		description = str(description_value).strip() if description_value is not None else ""
 
-	first_payload = _extract_first_question_payload(parsed)
 	example = ""
-	if isinstance(first_payload, dict):
-		example_source = str(first_payload.get("text") or first_payload.get("title") or "").strip()
-		example = string_to_latex(example_source)
-
 	figure_path = ""
-	if isinstance(first_payload, dict):
-		figure_ref = first_payload.get("figure")
-		if isinstance(figure_ref, str) and figure_ref.strip():
-			normalized = figure_ref.strip().replace("\\", "/")
-			base_dir = posixpath.dirname(yaml_path)
-			figure_path = posixpath.normpath(posixpath.join(base_dir, normalized))
+	for question_payload in _iter_question_payloads(parsed):
+		if example == "":
+			example_source = str(question_payload.get("text") or question_payload.get("title") or "").strip()
+			if example_source:
+				example = string_to_latex(example_source)
+
+		if figure_path == "":
+			figure_ref = question_payload.get("figure")
+			if isinstance(figure_ref, str) and figure_ref.strip():
+				figure_path = _resolve_figure_path(yaml_path, figure_ref, repo_root)
+
+		if example and figure_path:
+			break
 
 	return {"description": description, "example": example, "figure_path": figure_path}
 
@@ -122,6 +186,7 @@ def catalog_api(request):
 	owner = state.repo_owner if state else "Zhongzhou"
 	repo = state.repo_name if state else "ESTELA-physics-problem-bank"
 	branch = state.default_branch if state and state.default_branch else "main"
+	local_repo_root = Path(settings.BASE_DIR) / ".cache" / "problem-bank" / f"{owner}_{repo}"
 	_load_modal_cache(owner, repo)
 
 	classes_qs = PhysicsClass.objects.prefetch_related("units__problems").all()
@@ -130,8 +195,16 @@ def catalog_api(request):
 	modal_cache = {}
 	for yaml_path, content, sha in repo_rows:
 		cached = _MODAL_DATA_BY_SHA.get(sha)
+		refresh_cached = False
 		if cached is None:
-			cached = _parse_problem_modal_data(content, yaml_path)
+			refresh_cached = True
+		else:
+			cached_figure = str(cached.get("figure_path", "")).strip()
+			if not cached_figure or not _figure_exists(local_repo_root, cached_figure):
+				refresh_cached = True
+
+		if refresh_cached:
+			cached = _parse_problem_modal_data(content, yaml_path, local_repo_root)
 			_MODAL_DATA_BY_SHA[sha] = cached
 		modal_cache[yaml_path] = cached
 
