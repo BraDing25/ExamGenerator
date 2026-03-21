@@ -126,6 +126,9 @@ rm -rf .cache/problem-bank
 
 # Sync
 python manage.py sync_problem_bank
+
+# Force rebuild catalog after sync logic/code changes (recommended after deploy updates)
+python manage.py sync_problem_bank --force
 ```
 
 If output is:
@@ -174,6 +177,9 @@ python manage.py collectstatic --noinput
 # Good final checks
 python manage.py check --deploy
 python manage.py sync_problem_bank
+
+# If sync/parsing logic changed in code, force rebuild from current repo contents
+python manage.py sync_problem_bank --force
 ```
 
 Then click Reload in the Web tab.

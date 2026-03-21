@@ -453,7 +453,7 @@ class GitHubProblemBankSyncService:
             )
         return entries
 
-    def sync(self):
+    def sync(self, force_rebuild=False):
         state = self._get_state()
         state.repo_owner = self.owner
         state.repo_name = self.repo
@@ -464,7 +464,7 @@ class GitHubProblemBankSyncService:
         self._ensure_local_repo(branch)
         latest_head = self._current_head()
 
-        if state.tree_etag and state.tree_etag == latest_head and RepositoryFile.objects.exists():
+        if (not force_rebuild) and state.tree_etag and state.tree_etag == latest_head and RepositoryFile.objects.exists():
             self._ensure_modal_cache_file()
             state.last_status = "unchanged"
             state.last_message = "Repository unchanged; using database cache."
