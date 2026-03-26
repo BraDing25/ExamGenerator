@@ -47,11 +47,24 @@ application = get_wsgi_application()
 ```
 
 ### 3.2 Environment variables
-Set:
-- `DJANGO_DEBUG=false`
-- `DJANGO_SECRET_KEY=<long-random-secret>`
-- `DJANGO_ALLOWED_HOSTS=BradyDin25.pythonanywhere.com`
-- `DJANGO_CSRF_TRUSTED_ORIGINS=https://BradyDin25.pythonanywhere.com`
+In PythonAnywhere Web tab -> Environment variables, set these exact names and values:
+
+```text
+DJANGO_DEBUG=false
+DJANGO_SECRET_KEY=<paste-your-generated-secret-key-here>
+DJANGO_ALLOWED_HOSTS=BradyDin25.pythonanywhere.com
+DJANGO_CSRF_TRUSTED_ORIGINS=https://BradyDin25.pythonanywhere.com
+DJANGO_SECURE_SSL_REDIRECT=true
+DJANGO_SECURE_HSTS_SECONDS=31536000
+DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS=true
+DJANGO_SECURE_HSTS_PRELOAD=false
+```
+
+Generate a strong secret key in PythonAnywhere Bash:
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
 
 ### 3.3 Static files mapping
 - URL: `/static/`
