@@ -34,28 +34,16 @@
             <div class="container">
                 <a href="{% url 'home' %}">Home</a>
                 <a href="{% url 'problems' %}">Problem Sets</a>
-                <a href="{% url 'generator' %}">Generator</a>
             </div>
         </nav>
     </div>
 
-    <div class="container" style="margin-top: 40px; height: calc(100vh - 276px); overflow-y: auto;" id="classes">
+    <div class="container problems-class-view" id="classes">
         <h2>Problem Sets</h2>
-        <div style="display: flex; flex-direction: row; flex-wrap: wrap;" id="problem-classes"></div>
+        <div id="problem-classes" class="problem-class-grid"></div>
     </div>
 
-    <div id="problem-class-pages" style="display: none;"></div>
-
-    <div class="problem-modal-overlay" id="problem-modal-overlay" aria-hidden="true">
-        <div class="problem-modal" role="dialog" aria-modal="true" aria-labelledby="problem-modal-title">
-            <button class="problem-modal-close" id="problem-modal-close" aria-label="Close problem description">&times;</button>
-            <h3 id="problem-modal-title">Problem</h3>
-            <p id="problem-modal-description"></p>
-            <h4>Example:</h4>
-            <p id="problem-modal-example"></p>
-            <img id="problem-modal-figure" alt="Problem figure" />
-        </div>
-    </div>
+    <div id="problem-class-pages" class="problem-pages-host" style="display: none;"></div>
 
     <footer>
         <div class="container">

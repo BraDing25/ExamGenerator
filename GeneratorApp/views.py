@@ -1,5 +1,6 @@
 import posixpath
 import json
+import hashlib
 import re
 import tempfile
 from pathlib import Path
@@ -7,7 +8,7 @@ from urllib.parse import quote
 
 import yaml
 from django.conf import settings
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
@@ -21,6 +22,89 @@ from .utils.exam_generation import string_to_latex
 
 _MODAL_DATA_BY_SHA = {}
 _MODAL_CACHE_KEY = None
+_CATALOG_CACHE_KEY = None
+_CATALOG_CACHE_DATA = None
+
+
+_THUMBNAIL_STOPWORDS = {
+	"and", "of", "the", "to", "in", "for", "on", "with", "a", "an", "i", "ii", "iii", "iv",
+	"physics", "mechanics", "motion", "laws", "law", "unit", "phy", "newton", "newtons",
+}
+
+
+def _keyword_tokens(text):
+	parts = re.findall(r"[A-Za-z0-9]+", str(text or "").lower())
+	return {token for token in parts if len(token) > 1 and token not in _THUMBNAIL_STOPWORDS}
+
+
+def _select_class_thumbnail_url(class_name, candidates):
+	if not candidates:
+		return ""
+
+	class_tokens = _keyword_tokens(class_name)
+	if not class_tokens:
+		sorted_candidates = sorted(candidates, key=lambda item: item.get("figure_url", ""))
+		seed = hashlib.sha256(str(class_name).encode("utf-8")).hexdigest()
+		index = int(seed[:8], 16) % len(sorted_candidates)
+		return sorted_candidates[index].get("figure_url", "")
+
+	best_score = -1
+	best_candidates = []
+	for candidate in candidates:
+		candidate_tokens = _keyword_tokens(candidate.get("unit_name", ""))
+		candidate_tokens.update(_keyword_tokens(candidate.get("problem_title", "")))
+		candidate_tokens.update(_keyword_tokens(candidate.get("problem_code", "")))
+		candidate_tokens.update(_keyword_tokens(candidate.get("yaml_path", "")))
+
+		score = len(class_tokens.intersection(candidate_tokens))
+		if score > best_score:
+			best_score = score
+			best_candidates = [candidate]
+		elif score == best_score:
+			best_candidates.append(candidate)
+
+	if not best_candidates:
+		best_candidates = candidates
+
+	sorted_best = sorted(best_candidates, key=lambda item: item.get("figure_url", ""))
+	seed_source = str(class_name) + "|" + str(len(sorted_best))
+	seed = hashlib.sha256(seed_source.encode("utf-8")).hexdigest()
+	index = int(seed[:8], 16) % len(sorted_best)
+	return sorted_best[index].get("figure_url", "")
+
+
+def _safe_load_problem_yaml(yaml_content):
+	if not yaml_content:
+		return {}
+
+	try:
+		parsed = yaml.safe_load(yaml_content) or {}
+		if isinstance(parsed, dict):
+			return parsed
+	except yaml.YAMLError:
+		pass
+
+	# Fallback for malformed bank headers: load only the questions section.
+	match = re.search(r"(?m)^questions:\s*$", yaml_content)
+	if not match:
+		return {}
+
+	questions_block = yaml_content[match.start():]
+	try:
+		parsed = yaml.safe_load(questions_block) or {}
+		if isinstance(parsed, dict):
+			return parsed
+	except yaml.YAMLError:
+		return {}
+
+	return {}
+
+
+def _build_local_figure_url(figure_path):
+	if not figure_path:
+		return ""
+	encoded = quote(str(figure_path).strip(), safe="/")
+	return f"/api/problem-figure/?path={encoded}"
 
 
 def _resolve_figure_path(yaml_path, figure_ref, repo_root):
@@ -103,10 +187,7 @@ def _parse_problem_modal_data(yaml_content, yaml_path, repo_root):
 	if not yaml_content:
 		return default_payload
 
-	try:
-		parsed = yaml.safe_load(yaml_content) or {}
-	except yaml.YAMLError:
-		return default_payload
+	parsed = _safe_load_problem_yaml(yaml_content)
 
 	if not isinstance(parsed, dict):
 		return default_payload
@@ -134,6 +215,311 @@ def _parse_problem_modal_data(yaml_content, yaml_path, repo_root):
 			break
 
 	return {"description": description, "example": example, "figure_path": figure_path}
+
+
+def _parse_problem_question_data(yaml_content, yaml_path, repo_root, owner, repo, branch):
+	def _is_true(value):
+		if isinstance(value, bool):
+			return value
+		if isinstance(value, str):
+			return value.strip().lower() in ("true", "yes", "1")
+		return False
+
+	def _clean_text(value):
+		if value is None:
+			return ""
+		text = str(value).replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
+		text = re.sub(r"[ \t]+", " ", text).strip()
+		return text
+
+	def _normalize_letter(raw_letter, fallback_index):
+		candidate = _clean_text(raw_letter).upper()
+		# Only keep explicit single-letter labels; otherwise use positional A/B/C fallback.
+		if re.fullmatch(r"[A-Z]", candidate):
+			return candidate
+		return chr(65 + fallback_index)
+
+	def _extract_choice_records(question_payload):
+		if not isinstance(question_payload, dict):
+			return []
+
+		raw_choices = question_payload.get("choices")
+		if raw_choices is None:
+			raw_choices = question_payload.get("answers")
+		if raw_choices is None:
+			raw_choices = question_payload.get("options")
+
+		records = []
+
+		def append_record(letter, text_value, is_correct):
+			text = _clean_text(text_value)
+			if not text:
+				return
+			clean_letter = _normalize_letter(letter, len(records))
+			records.append({
+				"letter": clean_letter,
+				"text": text,
+				"is_correct": _is_true(is_correct),
+			})
+
+		if isinstance(raw_choices, dict):
+			for key, value in raw_choices.items():
+				if isinstance(value, dict):
+					append_record(key, value.get("text"), value.get("is_correct") or value.get("correct"))
+				else:
+					append_record(key, value, False)
+			return records
+
+		if not isinstance(raw_choices, list):
+			return records
+
+		for idx, choice in enumerate(raw_choices):
+			default_letter = chr(65 + idx)
+			if isinstance(choice, dict):
+				if len(choice) == 1:
+					entry_key = next(iter(choice.keys()))
+					entry_value = choice[entry_key]
+					if isinstance(entry_value, dict):
+						append_record(entry_key, entry_value.get("text"), entry_value.get("is_correct") or entry_value.get("correct"))
+						continue
+					if not isinstance(entry_value, (list, dict)):
+						append_record(entry_key, entry_value, False)
+						continue
+
+				append_record(
+					choice.get("label") or choice.get("id") or default_letter,
+					choice.get("text"),
+					choice.get("is_correct") or choice.get("correct"),
+				)
+			else:
+				append_record(default_letter, choice, False)
+
+		return records
+
+	def _format_to_sig_figs(value_str, sig_figs):
+		"""Convert a number to specified significant figures."""
+		try:
+			value = float(value_str)
+			if value == 0:
+				return value_str
+			
+			from math import log10, floor
+			
+			# Calculate the number of decimal places needed
+			magnitude = floor(log10(abs(value)))
+			decimal_places = sig_figs - magnitude - 1
+			
+			if decimal_places < 0:
+				# Round to nearest 10, 100, etc.
+				rounded = round(value, decimal_places)
+				return str(int(rounded))
+			else:
+				rounded = round(value, decimal_places)
+				return f"{rounded:.{decimal_places}f}"
+		except (ValueError, TypeError):
+			return value_str
+
+	def _extract_answer_text(question_payload):
+		if not isinstance(question_payload, dict):
+			return ""
+
+		choice_records = _extract_choice_records(question_payload)
+		correct_letters = [record["letter"] for record in choice_records if record["is_correct"]]
+		if correct_letters:
+			return ", ".join(correct_letters)
+
+		# Check for value-based answers with tolerance
+		value_key = None
+		for key in ("value", "numerical_answer", "numeric_answer"):
+			if key in question_payload:
+				value_key = key
+				break
+
+		if value_key:
+			value_data = question_payload.get(value_key)
+			
+			# Handle case where value is a dict with nested structure
+			if isinstance(value_data, dict):
+				actual_value = _clean_text(value_data.get("value"))
+				tolerance = _clean_text(value_data.get("tolerance"))
+				margin_type = _clean_text(value_data.get("margin_type"))
+				precision = value_data.get("precision")
+				precision_type = _clean_text(value_data.get("precision_type"))
+				
+				if actual_value:
+					result_parts = [actual_value]
+					
+					if tolerance:
+						# Add % to tolerance if margin_type is "percent"
+						if margin_type and "percent" in margin_type.lower():
+							result_parts.append(f"Tolerance: {tolerance}%")
+						else:
+							result_parts.append(f"Tolerance: {tolerance}")
+					
+					# Check for significant figures / precision
+					if precision and precision_type and "significant" in precision_type.lower():
+						try:
+							precision_num = int(_clean_text(str(precision)))
+							sig_figs_value = _format_to_sig_figs(actual_value, precision_num)
+							result_parts.append(f"Significant Figures: {sig_figs_value}")
+						except (ValueError, TypeError):
+							pass
+					
+					return "    ".join(result_parts)
+					
+			else:
+				# Handle simple value
+				value = _clean_text(value_data)
+				tolerance = None
+				margin_type = None
+				for tol_key in ("tolerance", "tol"):
+					if tol_key in question_payload:
+						tolerance = _clean_text(question_payload.get(tol_key))
+						break
+				
+				for mt_key in ("margin_type",):
+					if mt_key in question_payload:
+						margin_type = _clean_text(question_payload.get(mt_key))
+						break
+
+				if value:
+					result_parts = [value]
+					if tolerance:
+						if margin_type and "percent" in margin_type.lower():
+							result_parts.append(f"Tolerance: {tolerance}%")
+						else:
+							result_parts.append(f"Tolerance: {tolerance}")
+					return "    ".join(result_parts)
+
+		answers = []
+
+		def add_answer(answer_val):
+			if answer_val is None:
+				return
+			
+			# Check if answer_val is a dict with value/tolerance structure
+			if isinstance(answer_val, dict):
+				if "value" in answer_val:
+					actual_value = _clean_text(answer_val.get("value"))
+					tolerance = _clean_text(answer_val.get("tolerance"))
+					margin_type = _clean_text(answer_val.get("margin_type"))
+					precision = answer_val.get("precision")
+					precision_type = _clean_text(answer_val.get("precision_type"))
+					
+					if actual_value:
+						result_parts = [actual_value]
+						
+						if tolerance:
+							if margin_type and "percent" in margin_type.lower():
+								result_parts.append(f"Tolerance: {tolerance}%")
+							else:
+								result_parts.append(f"Tolerance: {tolerance}")
+						
+						# Check for significant figures / precision
+						if precision and precision_type and "significant" in precision_type.lower():
+							try:
+								precision_num = int(_clean_text(str(precision)))
+								sig_figs_value = _format_to_sig_figs(actual_value, precision_num)
+								result_parts.append(f"Significant Figures: {sig_figs_value}")
+							except (ValueError, TypeError):
+								pass
+						
+						formatted = "    ".join(result_parts)
+						if formatted not in answers:
+							answers.append(formatted)
+						return
+			
+			if isinstance(answer_val, list):
+				for entry in answer_val:
+					add_answer(entry)
+				return
+			
+			text = _clean_text(answer_val)
+			if text and text not in answers:
+				answers.append(text)
+
+		for key in ("answer", "correct_answer", "correct", "solution", "final_answer", "ans"):
+			answer_val = question_payload.get(key)
+			add_answer(answer_val)
+
+		if not answers:
+			# Check if this is a "categories" item (no answer provided)
+			if "categories" in question_payload and not answers:
+				return "Not provided in this item. Refer to source code for further details."
+			return ""
+
+		if len(answers) == 1:
+			return answers[0]
+
+		return "\n".join([f"- {item}" for item in answers])
+
+	def _build_output_text(question_payload):
+		if not isinstance(question_payload, dict):
+			return _clean_text(question_payload)
+
+		stem = _clean_text(question_payload.get("text") or question_payload.get("title") or question_payload.get("question") or "")
+		if not stem:
+			stem = _clean_text(question_payload)
+
+		choice_records = _extract_choice_records(question_payload)
+		if not choice_records:
+			return stem
+
+		choice_lines = [f"{record['letter']}) {record['text']}" for record in choice_records]
+
+		if not choice_lines:
+			return stem
+
+		return stem + "\n\nChoices:\n" + "\n".join(choice_lines)
+
+	if not yaml_content:
+		return []
+
+	parsed = _safe_load_problem_yaml(yaml_content)
+
+	payloads = _iter_question_payloads(parsed)
+	entries = []
+
+	for index, payload in enumerate(payloads, start=1):
+		label = f"Problem {index}"
+		answer_text = ""
+		figure_url = ""
+		if isinstance(payload, dict):
+			label_value = payload.get("title") or payload.get("name") or payload.get("id") or ""
+			if label_value:
+				label = str(label_value).strip()
+
+			output_source = _build_output_text(payload)
+
+			answer_text = _extract_answer_text(payload)
+
+			figure_ref = payload.get("figure")
+			if isinstance(figure_ref, str) and figure_ref.strip():
+				figure_path = _resolve_figure_path(yaml_path, figure_ref, repo_root)
+				if figure_path and _figure_exists(repo_root, figure_path):
+					figure_url = _build_local_figure_url(figure_path)
+
+			yaml_source = yaml.safe_dump(payload, sort_keys=False, default_flow_style=False, allow_unicode=False).strip()
+		else:
+			output_source = _build_output_text(payload)
+			yaml_source = str(payload)
+
+		latex_source = string_to_latex(output_source) if output_source else ""
+		answer_latex = string_to_latex(answer_text) if answer_text else ""
+
+		entries.append(
+			{
+				"index": index,
+				"label": label,
+				"output": latex_source,
+				"answer": answer_latex,
+				"figure_url": figure_url,
+				"latex_source": latex_source,
+				"yaml_source": yaml_source,
+			}
+		)
+
+	return entries
 
 
 def _load_modal_cache(owner, repo):
@@ -182,10 +568,20 @@ def latex_preview_api(request):
 
 @require_GET
 def catalog_api(request):
+	global _CATALOG_CACHE_KEY
+	global _CATALOG_CACHE_DATA
+
 	state = SyncState.objects.first()
 	owner = state.repo_owner if state else "Zhongzhou"
 	repo = state.repo_name if state else "ESTELA-physics-problem-bank"
 	branch = state.default_branch if state and state.default_branch else "main"
+	last_synced = state.last_synced_at.isoformat() if state and state.last_synced_at else "never"
+	problem_count = Problem.objects.count()
+	catalog_cache_key = f"{owner}/{repo}:{branch}:{last_synced}:{problem_count}"
+
+	if _CATALOG_CACHE_KEY == catalog_cache_key and _CATALOG_CACHE_DATA is not None:
+		return JsonResponse(_CATALOG_CACHE_DATA)
+
 	local_repo_root = Path(settings.BASE_DIR) / ".cache" / "problem-bank" / f"{owner}_{repo}"
 	_load_modal_cache(owner, repo)
 
@@ -211,15 +607,24 @@ def catalog_api(request):
 	classes = []
 	for cls in classes_qs:
 		units = []
+		class_thumbnail_candidates = []
 		for unit in cls.units.all():
 			problems = []
 			for problem in unit.problems.all():
 				modal_data = modal_cache.get(problem.yaml_path, {"description": "", "example": "", "figure_path": ""})
 				figure_path = str(modal_data.get("figure_path", "")).strip()
 				figure_url = ""
-				if figure_path:
-					encoded = quote(figure_path, safe="/")
-					figure_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{encoded}"
+				if figure_path and _figure_exists(local_repo_root, figure_path):
+					figure_url = _build_local_figure_url(figure_path)
+					class_thumbnail_candidates.append(
+						{
+							"figure_url": figure_url,
+							"unit_name": unit.name,
+							"problem_title": problem.title,
+							"problem_code": problem.code,
+							"yaml_path": problem.yaml_path,
+						}
+					)
 				problems.append(
 					{
 						"id": problem.id,
@@ -247,11 +652,60 @@ def catalog_api(request):
 				"id": cls.id,
 				"name": cls.name,
 				"sort_order": cls.sort_order,
+				"class_thumbnail_url": _select_class_thumbnail_url(cls.name, class_thumbnail_candidates),
 				"units": units,
 			}
 		)
 
-	return JsonResponse({"classes": classes})
+	payload = {"classes": classes}
+	_CATALOG_CACHE_KEY = catalog_cache_key
+	_CATALOG_CACHE_DATA = payload
+
+	return JsonResponse(payload)
+
+
+@require_GET
+def problem_questions_api(request):
+	yaml_path = str(request.GET.get("yaml_path", "")).strip()
+	if not yaml_path:
+		return JsonResponse({"message": "yaml_path is required."}, status=400)
+
+	state = SyncState.objects.first()
+	owner = state.repo_owner if state else "Zhongzhou"
+	repo = state.repo_name if state else "ESTELA-physics-problem-bank"
+	branch = state.default_branch if state and state.default_branch else "main"
+	local_repo_root = Path(settings.BASE_DIR) / ".cache" / "problem-bank" / f"{owner}_{repo}"
+
+	repo_file = RepositoryFile.objects.filter(path=yaml_path).values("content").first()
+	if not repo_file:
+		return JsonResponse({"message": "Problem file not found."}, status=404)
+
+	questions = _parse_problem_question_data(repo_file["content"], yaml_path, local_repo_root, owner, repo, branch)
+	return JsonResponse({"yaml_path": yaml_path, "questions": questions})
+
+
+@require_GET
+def problem_figure_api(request):
+	figure_path = str(request.GET.get("path", "")).strip().replace("\\", "/")
+	if not figure_path:
+		raise Http404("Figure path is required.")
+
+	sync_state = SyncState.objects.first()
+	owner = sync_state.repo_owner if sync_state else "Zhongzhou"
+	repo = sync_state.repo_name if sync_state else "ESTELA-physics-problem-bank"
+	local_repo_root = Path(settings.BASE_DIR) / ".cache" / "problem-bank" / f"{owner}_{repo}"
+
+	# Prevent path traversal: only allow files inside the cached repository root.
+	target_path = (local_repo_root / Path(*figure_path.split("/"))).resolve()
+	try:
+		target_path.relative_to(local_repo_root.resolve())
+	except ValueError as exc:
+		raise Http404("Invalid figure path.") from exc
+
+	if not target_path.is_file():
+		raise Http404("Figure not found.")
+
+	return FileResponse(open(target_path, "rb"))
 
 
 @require_GET

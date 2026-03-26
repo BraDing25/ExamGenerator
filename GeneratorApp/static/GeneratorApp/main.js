@@ -20,9 +20,10 @@ function showClass(cls) {
       main.style.display = "none";
       if (file === "problems.html") {
           pcp.style.display = "block";
+      } else if (file === "generator.html") {
+        selectFirstUnit(cls);
+        updateShoppingCart(cls);
       }
-      selectFirstUnit(cls);
-      updateShoppingCart(cls);
   } else {
       c.style.display = "none";
       if (file === "generator.html") {
@@ -42,7 +43,9 @@ function selectFirstUnit(cls) {
 }
 
 let cachedCatalog = null;
+let cachedProblemQuestionData = new Map();
 let buttonLockState = null;
+const CATALOG_SESSION_CACHE_KEY = 'catalogData:v2';
 
 function lockAllButtons() {
   if (buttonLockState) {
@@ -74,6 +77,19 @@ async function getCatalogData() {
   }
 
   try {
+    const cachedRaw = sessionStorage.getItem(CATALOG_SESSION_CACHE_KEY);
+    if (cachedRaw) {
+      const cachedParsed = JSON.parse(cachedRaw);
+      if (Array.isArray(cachedParsed)) {
+        cachedCatalog = cachedParsed;
+        return cachedCatalog;
+      }
+    }
+  } catch (error) {
+    console.warn('Catalog session cache read failed:', error);
+  }
+
+  try {
     const response = await fetch('/api/catalog/', { headers: { 'Accept': 'application/json' } });
     
     if (!response.ok) {
@@ -82,6 +98,13 @@ async function getCatalogData() {
 
     const payload = await response.json();
     cachedCatalog = payload.classes || [];
+
+    try {
+      sessionStorage.setItem(CATALOG_SESSION_CACHE_KEY, JSON.stringify(cachedCatalog));
+    } catch (error) {
+      console.warn('Catalog session cache write failed:', error);
+    }
+
     return cachedCatalog;
   } catch (error) {
     console.error('getCatalogData error:', error.message);
@@ -334,7 +357,226 @@ function setPanelHeight(panel) {
   panel.style.maxHeight = panel.scrollHeight + "px";
 }
 
+function syncProblemListPaneHeight(panel) {
+  if (!panel) {
+    return;
+  }
+
+  const listPane = panel.querySelector('.problem-list-pane');
+  const listEl = panel.querySelector('.problem-question-list');
+  const detailPane = panel.querySelector('.problem-detail-pane');
+  const previewContentEl = panel.querySelector('.problem-detail-content[data-tab="preview"]');
+  const yamlContentEl = panel.querySelector('.problem-detail-content[data-tab="yaml"]');
+  const yamlEl = panel.querySelector('.problem-detail-yaml');
+
+  if (!listPane || !listEl || !detailPane) {
+    return;
+  }
+
+  if (previewContentEl) {
+    const measuredPreviewHeight = previewContentEl.offsetHeight;
+    if (measuredPreviewHeight > 0) {
+      panel.dataset.previewHeight = String(measuredPreviewHeight);
+    }
+  }
+
+  const savedPreviewHeight = Number(panel.dataset.previewHeight || 0);
+  const previewHeight = Math.max(260, savedPreviewHeight || detailPane.offsetHeight);
+
+  if (yamlContentEl) {
+    yamlContentEl.style.height = previewHeight + 'px';
+    yamlContentEl.style.minHeight = previewHeight + 'px';
+    yamlContentEl.style.maxHeight = previewHeight + 'px';
+  }
+  if (yamlEl) {
+    yamlEl.style.height = '100%';
+    yamlEl.style.maxHeight = '100%';
+  }
+
+  const targetHeight = Math.max(260, detailPane.offsetHeight);
+
+  listPane.style.height = targetHeight + 'px';
+  listPane.style.maxHeight = targetHeight + 'px';
+
+  const paneRect = listPane.getBoundingClientRect();
+  const listRect = listEl.getBoundingClientRect();
+  const listOffsetTop = Math.max(0, Math.ceil(listRect.top - paneRect.top));
+  const listHeight = Math.max(120, targetHeight - listOffsetTop - 8);
+  listEl.style.maxHeight = listHeight + 'px';
+}
+
+async function getProblemQuestions(yamlPath) {
+  if (!yamlPath) {
+    return [];
+  }
+
+  if (cachedProblemQuestionData.has(yamlPath)) {
+    return cachedProblemQuestionData.get(yamlPath);
+  }
+
+  const response = await fetch('/api/problems/questions/?yaml_path=' + encodeURIComponent(yamlPath), {
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!response.ok) {
+    throw new Error('Unable to load questions for this problem.');
+  }
+
+  const payload = await response.json();
+  const questions = Array.isArray(payload.questions) ? payload.questions : [];
+  cachedProblemQuestionData.set(yamlPath, questions);
+  return questions;
+}
+
+function activateProblemDetailTab(panel, tabName) {
+  if (!panel) {
+    return;
+  }
+
+  const tabs = panel.querySelectorAll('.problem-detail-tab');
+  tabs.forEach(function (tab) {
+    tab.classList.toggle('active', tab.dataset.tab === tabName);
+  });
+
+  const panes = panel.querySelectorAll('.problem-detail-content');
+  panes.forEach(function (pane) {
+    pane.style.display = pane.dataset.tab === tabName ? 'block' : 'none';
+  });
+
+  window.requestAnimationFrame(function () {
+    syncProblemListPaneHeight(panel);
+  });
+}
+
+function renderProblemDetail(panel, question) {
+  if (!panel || !question) {
+    return;
+  }
+
+  const titleEl = panel.querySelector('.problem-detail-title');
+  const outputEl = panel.querySelector('.problem-detail-question');
+  const answerEl = panel.querySelector('.problem-detail-answer');
+  const figureEl = panel.querySelector('.problem-detail-figure');
+  const latexEl = panel.querySelector('.problem-detail-latex');
+  const yamlEl = panel.querySelector('.problem-detail-yaml');
+
+  if (titleEl) {
+    titleEl.textContent = question.label || ('Problem ' + String(question.index || ''));
+  }
+
+  if (outputEl) {
+    outputEl.textContent = question.output || '';
+
+    if (answerEl) {
+      const answerText = question.answer || 'Not provided in this item.';
+      answerEl.innerHTML = '<strong>Correct Answer:</strong>\n' + answerText;
+    }
+
+    if (figureEl) {
+      figureEl.onload = function () {
+        syncProblemListPaneHeight(panel);
+      };
+      figureEl.onerror = function () {
+        syncProblemListPaneHeight(panel);
+      };
+
+      if (question.figure_url) {
+        figureEl.src = question.figure_url;
+        figureEl.style.display = 'block';
+
+        if (figureEl.complete) {
+          syncProblemListPaneHeight(panel);
+        }
+      } else {
+        figureEl.removeAttribute('src');
+        figureEl.style.display = 'none';
+        syncProblemListPaneHeight(panel);
+      }
+    }
+
+    if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
+      if (typeof window.MathJax.typesetClear === 'function') {
+        window.MathJax.typesetClear([outputEl, answerEl]);
+      }
+      window.MathJax.typesetPromise([outputEl, answerEl])
+        .then(function () {
+          syncProblemListPaneHeight(panel);
+        })
+        .catch(function (err) {
+          console.error('MathJax typeset error:', err);
+          syncProblemListPaneHeight(panel);
+        });
+    } else {
+      syncProblemListPaneHeight(panel);
+    }
+  }
+
+  if (latexEl) {
+    latexEl.textContent = question.latex_source || '';
+  }
+
+  if (yamlEl) {
+    yamlEl.textContent = question.yaml_source || '';
+  }
+}
+
+function renderProblemQuestionList(classContainer, questions) {
+  const listEl = classContainer.querySelector('.problem-question-list');
+  const panel = classContainer.querySelector('.problem-browser-panel');
+  if (!listEl || !panel) {
+    return;
+  }
+
+  listEl.innerHTML = '';
+  if (!questions.length) {
+    const emptyState = document.createElement('p');
+    emptyState.className = 'problem-browser-empty';
+    emptyState.textContent = 'No question entries were found in this YAML file.';
+    listEl.appendChild(emptyState);
+
+    renderProblemDetail(panel, {
+      label: 'No question selected',
+      output: '',
+      answer: '',
+      figure_url: '',
+      latex_source: '',
+      yaml_source: '',
+    });
+    return;
+  }
+
+  questions.forEach(function (question, index) {
+    const itemButton = document.createElement('button');
+    itemButton.type = 'button';
+    itemButton.className = 'problem-question-item';
+    itemButton.textContent = question.label || ('Problem ' + String(index + 1));
+
+    itemButton.addEventListener('click', function () {
+      listEl.querySelectorAll('.problem-question-item').forEach(function (node) {
+        node.classList.remove('active');
+      });
+      itemButton.classList.add('active');
+      activateProblemDetailTab(panel, 'preview');
+      renderProblemDetail(panel, question);
+    });
+
+    listEl.appendChild(itemButton);
+  });
+
+  const firstButton = listEl.querySelector('.problem-question-item');
+  if (firstButton) {
+    firstButton.click();
+  }
+}
+
 document.addEventListener('click', function (evt) {
+  const tab = evt.target.closest('.problem-detail-tab');
+  if (tab) {
+    const panel = tab.closest('.problem-browser-panel');
+    activateProblemDetailTab(panel, tab.dataset.tab || 'preview');
+    return;
+  }
+
   if (!evt.target.classList.contains('accordion')) {
     return;
   }
@@ -407,7 +649,7 @@ function generateProblemsPage(classes) {
     thumbnailWrap.className = 'thumbnail';
 
     const thumbnail = document.createElement('img');
-    thumbnail.src = 'https://placehold.co/500x300/cccccc/888888?text=No+Image';
+    thumbnail.src = cls.class_thumbnail_url || 'https://placehold.co/500x300/cccccc/888888?text=No+Image';
     thumbnail.alt = cls.name + ' Thumbnail';
     thumbnail.loading = 'lazy';
 
@@ -424,69 +666,173 @@ function generateProblemsPage(classes) {
     classGrid.appendChild(classCardWrap);
 
     const classContainer = document.createElement('div');
-    classContainer.className = 'container';
+    classContainer.className = 'container problem-class-page';
     classContainer.id = 'class' + String(i);
     classContainer.style.display = 'none';
 
     const backButton = document.createElement('button');
     backButton.className = 'back';
-    backButton.textContent = 'Back';
+    backButton.textContent = 'Back to Classes';
     backButton.onclick = function () { showClass(i); };
     classContainer.appendChild(backButton);
 
+    const classHeading = document.createElement('h2');
+    classHeading.className = 'problem-class-heading';
+    classHeading.textContent = cls.name + ' Problem Browser';
+
+    const selectionPage = document.createElement('div');
+    selectionPage.className = 'problem-selection-page';
+    selectionPage.appendChild(classHeading);
+
+    const unitGrid = document.createElement('div');
+    unitGrid.className = 'problem-unit-grid';
+    const problemPickers = [];
+
     cls.units.forEach(function (unit) {
-      const accordion = document.createElement('button');
-      accordion.className = 'accordion';
-      accordion.textContent = 'Unit ' + String(unit.sort_order + 1) + ': ' + unit.name;
-      classContainer.appendChild(accordion);
+      const unitCard = document.createElement('div');
+      unitCard.className = 'probselect problem-unit-card';
 
-      const panel = document.createElement('div');
-      panel.className = 'panel';
+      const unitTitle = document.createElement('h3');
+      unitTitle.textContent = 'Unit ' + String(unit.sort_order + 1);
 
-      const panelRow = document.createElement('div');
-      panelRow.style.display = 'flex';
-      panelRow.style.flexDirection = 'row';
-      panelRow.style.flexWrap = 'wrap';
+      const unitName = document.createElement('p');
+      unitName.className = 'problem-unit-name';
+      unitName.textContent = unit.name || '';
 
-      unit.problems.forEach(function (problem, problemIndex) {
-        const k = problemIndex + 1;
-        const problemCard = document.createElement('div');
-        problemCard.className = 'problem-select';
+      const pickerLabel = document.createElement('p');
+      pickerLabel.className = 'problem-picker-label';
+      pickerLabel.textContent = 'Choose a problem';
 
-        const problemHeading = document.createElement('h3');
-        problemHeading.textContent = 'Problem ' + String(k);
+      const pickerWrap = document.createElement('div');
+      pickerWrap.className = 'problem-hover-picker';
 
-        const problemTitle = document.createElement('p');
-        problemTitle.textContent = problem.title;
-        problemTitle.style.fontWeight = 'bold';
+      const pickerTrigger = document.createElement('button');
+      pickerTrigger.type = 'button';
+      pickerTrigger.className = 'problem-picker-trigger';
+      pickerTrigger.textContent = 'Select a problem...';
 
-        const problemThumbWrap = document.createElement('div');
-        problemThumbWrap.className = 'thumbnail';
+      const pickerMenu = document.createElement('div');
+      pickerMenu.className = 'problem-hover-menu';
 
-        const problemThumb = document.createElement('img');
-        problemThumb.src = 'https://placehold.co/500x300/cccccc/888888?text=No+Image';
-        problemThumb.alt = cls.name + ' Unit ' + String(unit.sort_order + 1) + ' ' + problemHeading.textContent + ' Thumbnail';
-        problemThumb.loading = 'lazy';
+      unit.problems.forEach(function (problem) {
+        const selectedPath = problem.yaml_path || '';
+        const selectedTitle = problem.title || problem.code || 'Problem';
 
-        const viewButton = document.createElement('button');
-        viewButton.className = 'select-button';
-        viewButton.textContent = 'View Problem';
-        viewButton.dataset.problemTitle = problem.title || problemHeading.textContent;
-        viewButton.dataset.problemDescription = problem.description || '';
-        viewButton.dataset.problemExample = problem.example || '';
-        viewButton.dataset.problemFigureUrl = problem.figure_url || '';
+        const optionButton = document.createElement('button');
+        optionButton.type = 'button';
+        optionButton.className = 'problem-hover-option';
+        optionButton.textContent = selectedTitle;
 
-        problemThumbWrap.appendChild(problemThumb);
-        problemCard.appendChild(problemHeading);
-        problemCard.appendChild(problemTitle);
-        problemCard.appendChild(problemThumbWrap);
-        problemCard.appendChild(viewButton);
-        panelRow.appendChild(problemCard);
+        optionButton.addEventListener('click', async function () {
+          pickerTrigger.textContent = selectedTitle;
+
+          const selectedProblemEl = classContainer.querySelector('.problem-selected-problem');
+          const selectedPathEl = classContainer.querySelector('.problem-selected-path');
+          if (selectedProblemEl) {
+            selectedProblemEl.textContent = selectedPath ? selectedTitle : 'No problem selected';
+          }
+          if (selectedPathEl) {
+            selectedPathEl.textContent = selectedPath || '';
+          }
+
+          if (!selectedPath) {
+            renderProblemQuestionList(classContainer, []);
+            return;
+          }
+
+          backButton.style.display = 'none';
+          selectionPage.style.display = 'none';
+          detailPage.style.display = 'block';
+
+          try {
+            const listEl = classContainer.querySelector('.problem-question-list');
+            if (listEl) {
+              listEl.innerHTML = '<p class="problem-browser-empty">Loading questions...</p>';
+            }
+            const questions = await getProblemQuestions(selectedPath);
+            renderProblemQuestionList(classContainer, questions);
+          } catch (error) {
+            const listEl = classContainer.querySelector('.problem-question-list');
+            if (listEl) {
+              listEl.innerHTML = '<p class="problem-browser-empty">Unable to load questions for this file.</p>';
+            }
+          }
+        });
+
+        pickerMenu.appendChild(optionButton);
       });
 
-      panel.appendChild(panelRow);
-      classContainer.appendChild(panel);
+      pickerWrap.appendChild(pickerTrigger);
+      pickerWrap.appendChild(pickerMenu);
+
+      problemPickers.push({
+        trigger: pickerTrigger,
+        defaultLabel: 'Select a problem...'
+      });
+
+      unitCard.appendChild(unitTitle);
+      unitCard.appendChild(unitName);
+      unitCard.appendChild(pickerLabel);
+      unitCard.appendChild(pickerWrap);
+      unitGrid.appendChild(unitCard);
     });
+
+    selectionPage.appendChild(unitGrid);
+    classContainer.appendChild(selectionPage);
+
+    const detailPage = document.createElement('div');
+    detailPage.className = 'problem-detail-page';
+    detailPage.style.display = 'none';
+
+    const detailBackButton = document.createElement('button');
+    detailBackButton.className = 'back';
+    detailBackButton.textContent = 'Back to Problem Selection';
+    detailBackButton.onclick = function () {
+      detailPage.style.display = 'none';
+      selectionPage.style.display = 'block';
+      backButton.style.display = 'inline-block';
+
+      problemPickers.forEach(function (pickerInfo) {
+        pickerInfo.trigger.textContent = pickerInfo.defaultLabel;
+      });
+
+      const selectedProblemEl = classContainer.querySelector('.problem-selected-problem');
+      const selectedPathEl = classContainer.querySelector('.problem-selected-path');
+      if (selectedProblemEl) {
+        selectedProblemEl.textContent = 'No problem selected';
+      }
+      if (selectedPathEl) {
+        selectedPathEl.textContent = '';
+      }
+
+      renderProblemQuestionList(classContainer, []);
+    };
+    detailPage.appendChild(detailBackButton);
+
+    const browserPanel = document.createElement('div');
+    browserPanel.className = 'problem-browser-panel';
+
+    const selectedSummary = document.createElement('div');
+    selectedSummary.className = 'problem-selected-summary';
+    selectedSummary.innerHTML = '<p><strong>Selected Problem:</strong> <span class="problem-selected-problem">No problem selected</span></p><p class="problem-selected-path"></p>';
+    browserPanel.appendChild(selectedSummary);
+
+    const split = document.createElement('div');
+    split.className = 'problem-browser-split';
+
+    const listPane = document.createElement('div');
+    listPane.className = 'problem-list-pane';
+    listPane.innerHTML = '<h3>YAML Problems</h3><div class="problem-question-list"><p class="problem-browser-empty">Select a problem from a unit to view its questions.</p></div>';
+
+    const detailPane = document.createElement('div');
+    detailPane.className = 'problem-detail-pane';
+    detailPane.innerHTML = '<div class="problem-detail-title">No question selected</div><div class="problem-detail-tabs"><button type="button" class="problem-detail-tab active" data-tab="preview">Preview</button><button type="button" class="problem-detail-tab" data-tab="latex">LaTeX Source Code</button><button type="button" class="problem-detail-tab" data-tab="yaml">YAML Source Code</button></div><div class="problem-detail-content" data-tab="preview"><div class="problem-detail-question"></div><img class="problem-detail-figure" alt="Problem figure" style="display: none;" /><div class="problem-detail-answer"></div></div><div class="problem-detail-content" data-tab="latex" style="display: none;"><pre class="problem-detail-latex"></pre></div><div class="problem-detail-content" data-tab="yaml" style="display: none;"><pre class="problem-detail-yaml"></pre></div>';
+
+    split.appendChild(listPane);
+    split.appendChild(detailPane);
+    browserPanel.appendChild(split);
+    detailPage.appendChild(browserPanel);
+    classContainer.appendChild(detailPage);
 
     classPagesHost.appendChild(classContainer);
   });
@@ -760,7 +1106,7 @@ function generateGenPage(classes) {
     layer3.className = 'thumbnail';
 
     const thumbnail = document.createElement('img');
-    thumbnail.src = 'https://placehold.co/500x300/cccccc/888888?text=No+Image';
+    thumbnail.src = cls.class_thumbnail_url || 'https://placehold.co/500x300/cccccc/888888?text=No+Image';
     thumbnail.alt = cls.name + ' Thumbnail';
     thumbnail.loading = 'lazy';
     

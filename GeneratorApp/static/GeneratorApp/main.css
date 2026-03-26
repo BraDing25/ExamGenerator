@@ -126,9 +126,13 @@ footer {
     width: 250px;
     height: 150px;
     overflow: hidden;
+    border: 2px solid #d9d9d9;
+    border-radius: 10px;
+    background: #fff;
 }
 
 .thumbnail img {
+    display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -184,9 +188,21 @@ footer {
 
 
 /* Problem Set Styling */
-#problem-class-pages {
+.problems-class-view {
+    margin-top: 40px;
+    height: calc(100vh - 276px);
     overflow-y: auto;
-    height: calc(100vh - 276px)
+}
+
+.problem-class-grid {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+#problem-class-pages.problem-pages-host {
+    overflow-y: auto;
+    height: calc(100vh - 276px);
 }
 
 .class-select {
@@ -195,6 +211,300 @@ footer {
     margin: 0 30px 30px 30px;
     flex-direction: column;
     align-items: center;
+}
+
+.problem-class-page {
+    margin-top: 30px;
+    padding-bottom: 24px;
+}
+
+.problem-class-heading {
+    margin-top: 16px;
+}
+
+.problem-selection-page,
+.problem-detail-page {
+    width: 100%;
+}
+
+.problem-detail-page .problem-browser-panel {
+    margin-top: 14px;
+}
+
+.problem-unit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.problem-unit-card {
+    width: 100%;
+    min-height: 230px;
+    display: flex;
+    flex-direction: column;
+}
+
+.problem-unit-name {
+    min-height: 48px;
+    flex: 1 1 auto;
+}
+
+.problem-picker-label {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #666;
+}
+
+.problem-picker {
+    width: 100%;
+    margin-top: 8px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 14px;
+}
+
+.problem-hover-picker {
+    width: fit-content;
+    max-width: 100%;
+    min-width: 220px;
+    margin-top: 8px;
+    position: relative;
+}
+
+.problem-picker-trigger {
+    width: 100%;
+    max-width: 420px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+    padding: 8px;
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.problem-hover-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 100%;
+    width: max-content;
+    max-width: min(420px, 100%);
+    z-index: 20;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+    overflow: visible;
+    flex-direction: column;
+}
+
+.problem-hover-picker:hover .problem-hover-menu,
+.problem-hover-picker:focus-within .problem-hover-menu {
+    display: flex;
+}
+
+.problem-hover-option {
+    width: 100%;
+    border: none;
+    background: #fff;
+    text-align: left;
+    padding: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.problem-hover-option:hover {
+    background: #f4f4f4;
+}
+
+.problem-browser-panel {
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    background: #fff;
+    padding: 16px;
+}
+
+.problem-selected-summary {
+    margin-bottom: 12px;
+}
+
+.problem-selected-summary p {
+    margin: 0;
+}
+
+.problem-selected-path {
+    color: #666;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.problem-browser-split {
+    display: flex;
+    gap: 16px;
+    min-height: 420px;
+    align-items: stretch;
+}
+
+.problem-list-pane {
+    flex: 0 0 33.333%;
+    min-width: 240px;
+    border: 1px solid #e3e3e3;
+    border-radius: 10px;
+    padding: 12px;
+    background: #fafafa;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.problem-question-list {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 8px;
+    overflow-y: auto;
+}
+
+.problem-question-item {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+    padding: 10px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.problem-question-item:hover {
+    background: #f4f4f4;
+}
+
+.problem-question-item.active {
+    border-color: #FFB81C;
+    background: #fff5de;
+}
+
+.problem-detail-pane {
+    flex: 0 0 66.667%;
+    border: 1px solid #e3e3e3;
+    border-radius: 10px;
+    padding: 12px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.problem-detail-title {
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.problem-preview-pane {
+    min-height: 280px;
+}
+
+.problem-detail-question {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin-bottom: 14px;
+}
+
+.problem-detail-figure {
+    max-width: 100%;
+    max-height: 280px;
+    height: auto;
+    margin-bottom: 14px;
+    border: 1px solid #ececec;
+    border-radius: 8px;
+    background: #fff;
+    object-fit: contain;
+}
+
+.problem-detail-answer {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: #fff5de;
+    border: 1px solid #f0d48f;
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.problem-detail-tabs {
+    display: flex;
+    gap: 8px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+}
+
+.problem-detail-tab {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #f3f3f3;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.problem-detail-tab.active {
+    background: #FFB81C;
+    border-color: #d89c00;
+}
+
+.problem-detail-content {
+    min-height: 280px;
+}
+
+.problem-detail-output,
+.problem-detail-latex,
+.problem-detail-yaml {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.problem-detail-latex,
+.problem-detail-yaml {
+    margin: 0;
+    max-height: none;
+    overflow-y: visible;
+    background: #f7f7f7;
+    border-radius: 8px;
+    padding: 12px;
+    border: 1px solid #ececec;
+}
+
+.problem-detail-yaml {
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+.problem-browser-empty {
+    color: #666;
+    font-size: 14px;
+}
+
+@media (max-width: 980px) {
+    .problem-browser-split {
+        flex-direction: column;
+    }
+
+    .problem-list-pane,
+    .problem-detail-pane {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
 }
 
 .accordion {
