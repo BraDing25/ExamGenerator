@@ -460,22 +460,12 @@ function generateGenPage(classes) {
     var heading = document.createElement('h1');
     heading.textContent = cls.name;
 
-    var layer3 = document.createElement('div');
-    layer3.className = 'thumbnail';
-
-    var thumbnail = document.createElement('img');
-    thumbnail.src = cls.class_thumbnail_url || 'https://placehold.co/500x300/cccccc/888888?text=No+Image';
-    thumbnail.alt = cls.name + ' Thumbnail';
-    thumbnail.loading = 'lazy';
-
     var button = document.createElement('button');
     button.className = 'select-button';
     button.onclick = function () { showClass(i); };
     button.textContent = 'Select';
 
-    layer3.appendChild(thumbnail);
     layer2.appendChild(heading);
-    layer2.appendChild(layer3);
     layer2.appendChild(button);
     layer1.appendChild(layer2);
 

@@ -1,5 +1,6 @@
 /* Problems Page JavaScript */
 var cachedProblemQuestionData = new Map();
+var cachedProblemMetadata = new Map();
 
 function syncProblemListPaneHeight(panel) {
   if (!panel) {
@@ -50,11 +51,14 @@ function syncProblemListPaneHeight(panel) {
 
 async function getProblemQuestions(yamlPath) {
   if (!yamlPath) {
-    return [];
+    return { questions: [], metadata: {} };
   }
 
   if (cachedProblemQuestionData.has(yamlPath)) {
-    return cachedProblemQuestionData.get(yamlPath);
+    return {
+      questions: cachedProblemQuestionData.get(yamlPath),
+      metadata: cachedProblemMetadata.get(yamlPath) || {}
+    };
   }
 
   var response = await fetch('/api/problems/questions/?yaml_path=' + encodeURIComponent(yamlPath), {
@@ -67,8 +71,12 @@ async function getProblemQuestions(yamlPath) {
 
   var payload = await response.json();
   var questions = Array.isArray(payload.questions) ? payload.questions : [];
+  var metadata = payload.metadata || {};
+  
   cachedProblemQuestionData.set(yamlPath, questions);
-  return questions;
+  cachedProblemMetadata.set(yamlPath, metadata);
+  
+  return { questions: questions, metadata: metadata };
 }
 
 function activateProblemDetailTab(panel, tabName) {
@@ -91,7 +99,7 @@ function activateProblemDetailTab(panel, tabName) {
   });
 }
 
-function renderProblemDetail(panel, question) {
+function renderProblemDetail(panel, question, metadata) {
   if (!panel || !question) {
     return;
   }
@@ -111,8 +119,29 @@ function renderProblemDetail(panel, question) {
     outputEl.textContent = question.output || '';
 
     if (answerEl) {
-      var answerText = question.answer || 'Not provided in this item.';
-      answerEl.innerHTML = '<strong>Correct Answer:</strong>\n' + answerText;
+      var answerHTML = '<strong>Correct Answer:</strong> ' + (question.answer || 'Not provided in this item.');
+      
+      // Add per-question metadata if available
+      if (question.answer_type || (question.points !== undefined && question.points > 0) || (question.category_count !== undefined && question.category_count > 0)) {
+        answerHTML += '<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">';
+        
+        if (question.answer_type) {
+          var answerTypeDisplay = question.answer_type.replace(/_/g, ' ').charAt(0).toUpperCase() + question.answer_type.slice(1).replace(/_/g, ' ').toLowerCase();
+          answerHTML += '<div style="margin-bottom: 6px;"><strong>Answer Type:</strong> ' + answerTypeDisplay + '</div>';
+        }
+        
+        if (question.points !== undefined && question.points > 0) {
+          answerHTML += '<div style="margin-bottom: 6px;"><strong>Points Worth:</strong> ' + question.points + '</div>';
+        }
+        
+        if (question.category_count !== undefined && question.category_count > 0) {
+          answerHTML += '<div style="margin-bottom: 6px;"><strong>Categories:</strong> ' + question.category_count + '</div>';
+        }
+        
+        answerHTML += '</div>';
+      }
+      
+      answerEl.innerHTML = answerHTML;
     }
 
     if (figureEl) {
@@ -163,14 +192,30 @@ function renderProblemDetail(panel, question) {
   }
 }
 
-function renderProblemQuestionList(classContainer, questions) {
+function renderProblemQuestionList(classContainer, questions, metadata) {
   var listEl = classContainer.querySelector('.problem-question-list');
   var panel = classContainer.querySelector('.problem-browser-panel');
   if (!listEl || !panel) {
     return;
   }
 
+  // Store metadata in panel for renderProblemDetail to access
+  if (metadata) {
+    panel.dataset.problemMetadata = JSON.stringify(metadata);
+  }
+  
+  // Update the YAML Problems heading to include question count
+  var listPane = classContainer.querySelector('.problem-list-pane');
+  if (listPane && listPane.querySelector('h3')) {
+    var heading = 'YAML Problems';
+    if (metadata && metadata.num_questions !== undefined && metadata.num_questions > 0) {
+      heading += ' (' + metadata.num_questions + ')';
+    }
+    listPane.querySelector('h3').textContent = heading;
+  }
+
   listEl.innerHTML = '';
+  
   if (!questions.length) {
     var emptyState = document.createElement('p');
     emptyState.className = 'problem-browser-empty';
@@ -184,7 +229,7 @@ function renderProblemQuestionList(classContainer, questions) {
       figure_url: '',
       latex_source: '',
       yaml_source: '',
-    });
+    }, metadata);
     return;
   }
 
@@ -200,7 +245,7 @@ function renderProblemQuestionList(classContainer, questions) {
       });
       itemButton.classList.add('active');
       activateProblemDetailTab(panel, 'preview');
-      renderProblemDetail(panel, question);
+      renderProblemDetail(panel, question, metadata);
     });
 
     listEl.appendChild(itemButton);
@@ -242,22 +287,12 @@ function generateProblemsPage(classes) {
     var heading = document.createElement('h1');
     heading.textContent = cls.name;
 
-    var thumbnailWrap = document.createElement('div');
-    thumbnailWrap.className = 'thumbnail';
-
-    var thumbnail = document.createElement('img');
-    thumbnail.src = cls.class_thumbnail_url || 'https://placehold.co/500x300/cccccc/888888?text=No+Image';
-    thumbnail.alt = cls.name + ' Thumbnail';
-    thumbnail.loading = 'lazy';
-
     var selectButton = document.createElement('button');
     selectButton.className = 'select-button';
     selectButton.textContent = 'Select';
     selectButton.onclick = function () { showClass(i); };
 
-    thumbnailWrap.appendChild(thumbnail);
     classCard.appendChild(heading);
-    classCard.appendChild(thumbnailWrap);
     classCard.appendChild(selectButton);
     classCardWrap.appendChild(classCard);
     classGrid.appendChild(classCardWrap);
@@ -333,7 +368,7 @@ function generateProblemsPage(classes) {
           }
 
           if (!selectedPath) {
-            renderProblemQuestionList(classContainer, []);
+            renderProblemQuestionList(classContainer, [], {});
             return;
           }
 
@@ -346,8 +381,8 @@ function generateProblemsPage(classes) {
             if (listEl) {
               listEl.innerHTML = '<p class="problem-browser-empty">Loading questions...</p>';
             }
-            var questions = await getProblemQuestions(selectedPath);
-            renderProblemQuestionList(classContainer, questions);
+            var result = await getProblemQuestions(selectedPath);
+            renderProblemQuestionList(classContainer, result.questions, result.metadata);
           } catch (error) {
             var listElError = classContainer.querySelector('.problem-question-list');
             if (listElError) {
@@ -402,7 +437,7 @@ function generateProblemsPage(classes) {
         selectedPathEl.textContent = '';
       }
 
-      renderProblemQuestionList(classContainer, []);
+      renderProblemQuestionList(classContainer, [], {});
     };
     detailPage.appendChild(detailBackButton);
 

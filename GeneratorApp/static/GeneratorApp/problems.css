@@ -27,6 +27,7 @@
 .problem-selection-page,
 .problem-detail-page {
 	width: 100%;
+	overflow: visible;
 }
 
 .problem-detail-page .problem-browser-panel {
@@ -38,6 +39,7 @@
 	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 	gap: 16px;
 	margin-bottom: 24px;
+	overflow: visible;
 }
 
 .problem-unit-card {
@@ -45,6 +47,23 @@
 	min-height: 230px;
 	display: flex;
 	flex-direction: column;
+	background: #ffffff;
+	border: 2px solid #e0e0e0;
+	border-radius: 12px;
+	padding: 20px;
+	position: relative;
+	transition: all 0.3s ease;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+	overflow: visible;
+	z-index: 0;
+}
+
+.problem-unit-card:hover {
+	border-color: #FFB81C;
+	box-shadow: 0 8px 20px rgba(255, 184, 28, 0.15);
+	transform: translateY(-4px);
+	background-color: #fffbf5;
+	z-index: 100;
 }
 
 .problem-unit-name {
@@ -64,21 +83,36 @@
 	min-width: 220px;
 	margin-top: 8px;
 	position: relative;
+	z-index: 1001;
 }
 
 .problem-picker-trigger {
 	width: 100%;
 	max-width: 420px;
-	border: 1px solid #ddd;
+	border: 2px solid #ddd;
 	border-radius: 8px;
 	background: #fff;
-	padding: 8px;
+	padding: 8px 12px;
 	font-size: 14px;
 	text-align: left;
 	cursor: pointer;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	transition: all 0.3s ease;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.problem-picker-trigger:hover {
+	border-color: #FFB81C;
+	box-shadow: 0 4px 12px rgba(255, 184, 28, 0.2);
+	background: #fffbf5;
+}
+
+.problem-picker-trigger:focus {
+	outline: none;
+	border-color: #FFB81C;
+	box-shadow: 0 0 0 3px rgba(255, 184, 28, 0.1);
 }
 
 .problem-hover-menu {
@@ -86,16 +120,28 @@
 	position: absolute;
 	top: 100%;
 	left: 0;
+	z-index: 9999;
 	min-width: 100%;
 	width: max-content;
 	max-width: min(420px, 100%);
-	z-index: 20;
 	border: 1px solid #ddd;
 	border-radius: 8px;
 	background: #fff;
 	box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
 	overflow: visible;
 	flex-direction: column;
+	animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+	from {
+		opacity: 0;
+		transform: translateY(-8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 
 .problem-hover-picker:hover .problem-hover-menu,
@@ -108,16 +154,19 @@
 	border: none;
 	background: #fff;
 	text-align: left;
-	padding: 8px;
+	padding: 10px 12px;
 	cursor: pointer;
 	font-size: 14px;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	transition: all 0.2s ease;
 }
 
 .problem-hover-option:hover {
-	background: #f4f4f4;
+	background: #FFB81C;
+	color: var(--ucf-black);
+	padding-left: 16px;
 }
 
 .problem-browser-panel {

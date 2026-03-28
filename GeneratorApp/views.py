@@ -26,53 +26,6 @@ _CATALOG_CACHE_KEY = None
 _CATALOG_CACHE_DATA = None
 
 
-_THUMBNAIL_STOPWORDS = {
-	"and", "of", "the", "to", "in", "for", "on", "with", "a", "an", "i", "ii", "iii", "iv",
-	"physics", "mechanics", "motion", "laws", "law", "unit", "phy", "newton", "newtons",
-}
-
-
-def _keyword_tokens(text):
-	parts = re.findall(r"[A-Za-z0-9]+", str(text or "").lower())
-	return {token for token in parts if len(token) > 1 and token not in _THUMBNAIL_STOPWORDS}
-
-
-def _select_class_thumbnail_url(class_name, candidates):
-	if not candidates:
-		return ""
-
-	class_tokens = _keyword_tokens(class_name)
-	if not class_tokens:
-		sorted_candidates = sorted(candidates, key=lambda item: item.get("figure_url", ""))
-		seed = hashlib.sha256(str(class_name).encode("utf-8")).hexdigest()
-		index = int(seed[:8], 16) % len(sorted_candidates)
-		return sorted_candidates[index].get("figure_url", "")
-
-	best_score = -1
-	best_candidates = []
-	for candidate in candidates:
-		candidate_tokens = _keyword_tokens(candidate.get("unit_name", ""))
-		candidate_tokens.update(_keyword_tokens(candidate.get("problem_title", "")))
-		candidate_tokens.update(_keyword_tokens(candidate.get("problem_code", "")))
-		candidate_tokens.update(_keyword_tokens(candidate.get("yaml_path", "")))
-
-		score = len(class_tokens.intersection(candidate_tokens))
-		if score > best_score:
-			best_score = score
-			best_candidates = [candidate]
-		elif score == best_score:
-			best_candidates.append(candidate)
-
-	if not best_candidates:
-		best_candidates = candidates
-
-	sorted_best = sorted(best_candidates, key=lambda item: item.get("figure_url", ""))
-	seed_source = str(class_name) + "|" + str(len(sorted_best))
-	seed = hashlib.sha256(seed_source.encode("utf-8")).hexdigest()
-	index = int(seed[:8], 16) % len(sorted_best)
-	return sorted_best[index].get("figure_url", "")
-
-
 def _safe_load_problem_yaml(yaml_content):
 	if not yaml_content:
 		return {}
@@ -180,6 +133,75 @@ def _iter_question_payloads(parsed_yaml):
 				continue
 		payloads.append(question)
 	return payloads
+
+
+def _extract_question_metadata(question_payload):
+	"""Extract metadata for a single question: answer type, points, and categories."""
+	metadata = {
+		"points": 0,
+		"answer_type": "",
+		"category_count": 0,
+	}
+	
+	if not isinstance(question_payload, dict):
+		return metadata
+	
+	# Extract answer type
+	if "numerical" in question_payload or "value" in question_payload or "numerical_answer" in question_payload:
+		metadata["answer_type"] = "numerical"
+	elif "choices" in question_payload or "answers" in question_payload or "options" in question_payload:
+		metadata["answer_type"] = "multiple_choice"
+	elif "categories" in question_payload:
+		metadata["answer_type"] = "category"
+		# Count categories
+		categories = question_payload.get("categories")
+		if isinstance(categories, (list, dict)):
+			metadata["category_count"] = len(categories)
+	elif "text" in question_payload:
+		metadata["answer_type"] = "free_response"
+	
+	# Extract points
+	points = question_payload.get("points")
+	if points is not None:
+		try:
+			metadata["points"] = float(points)
+			if metadata["points"] == int(metadata["points"]):
+				metadata["points"] = int(metadata["points"])
+		except (ValueError, TypeError):
+			metadata["points"] = 0
+	
+	return metadata
+
+
+def _extract_problem_metadata(yaml_content):
+	"""Extract file-level metadata: total questions and all answer types."""
+	metadata = {
+		"answer_types": set(),
+		"num_questions": 0,
+	}
+	
+	if not yaml_content:
+		return {"answer_types": [], "num_questions": 0}
+	
+	parsed = _safe_load_problem_yaml(yaml_content)
+	if not isinstance(parsed, dict):
+		return {"answer_types": [], "num_questions": 0}
+	
+	for question_payload in _iter_question_payloads(parsed):
+		if not isinstance(question_payload, dict):
+			continue
+		
+		metadata["num_questions"] += 1
+		
+		# Extract answer type and add to set
+		question_meta = _extract_question_metadata(question_payload)
+		if question_meta["answer_type"]:
+			metadata["answer_types"].add(question_meta["answer_type"])
+	
+	return {
+		"answer_types": sorted(list(metadata["answer_types"])),
+		"num_questions": metadata["num_questions"],
+	}
 
 
 def _parse_problem_modal_data(yaml_content, yaml_path, repo_root):
@@ -507,6 +529,9 @@ def _parse_problem_question_data(yaml_content, yaml_path, repo_root, owner, repo
 		latex_source = string_to_latex(output_source) if output_source else ""
 		answer_latex = string_to_latex(answer_text) if answer_text else ""
 
+		# Extract per-question metadata
+		question_metadata = _extract_question_metadata(payload)
+
 		entries.append(
 			{
 				"index": index,
@@ -516,6 +541,9 @@ def _parse_problem_question_data(yaml_content, yaml_path, repo_root, owner, repo
 				"figure_url": figure_url,
 				"latex_source": latex_source,
 				"yaml_source": yaml_source,
+				"points": question_metadata["points"],
+				"answer_type": question_metadata["answer_type"],
+				"category_count": question_metadata["category_count"],
 			}
 		)
 
@@ -607,7 +635,6 @@ def catalog_api(request):
 	classes = []
 	for cls in classes_qs:
 		units = []
-		class_thumbnail_candidates = []
 		for unit in cls.units.all():
 			problems = []
 			for problem in unit.problems.all():
@@ -616,15 +643,6 @@ def catalog_api(request):
 				figure_url = ""
 				if figure_path and _figure_exists(local_repo_root, figure_path):
 					figure_url = _build_local_figure_url(figure_path)
-					class_thumbnail_candidates.append(
-						{
-							"figure_url": figure_url,
-							"unit_name": unit.name,
-							"problem_title": problem.title,
-							"problem_code": problem.code,
-							"yaml_path": problem.yaml_path,
-						}
-					)
 				problems.append(
 					{
 						"id": problem.id,
@@ -652,7 +670,6 @@ def catalog_api(request):
 				"id": cls.id,
 				"name": cls.name,
 				"sort_order": cls.sort_order,
-				"class_thumbnail_url": _select_class_thumbnail_url(cls.name, class_thumbnail_candidates),
 				"units": units,
 			}
 		)
@@ -681,7 +698,8 @@ def problem_questions_api(request):
 		return JsonResponse({"message": "Problem file not found."}, status=404)
 
 	questions = _parse_problem_question_data(repo_file["content"], yaml_path, local_repo_root, owner, repo, branch)
-	return JsonResponse({"yaml_path": yaml_path, "questions": questions})
+	metadata = _extract_problem_metadata(repo_file["content"])
+	return JsonResponse({"yaml_path": yaml_path, "questions": questions, "metadata": metadata})
 
 
 @require_GET
