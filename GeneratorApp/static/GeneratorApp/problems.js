@@ -316,24 +316,15 @@ function generateProblemsPage(classes) {
     var browserLayout = document.createElement('div');
     browserLayout.className = 'course-browser-layout';
 
-    var unitSidebar = document.createElement('div');
-    unitSidebar.className = 'course-unit-sidebar';
-    unitSidebar.innerHTML = '<h3>Units</h3>';
+    var unitBankPane = document.createElement('div');
+    unitBankPane.className = 'course-unit-bank-pane';
+    unitBankPane.innerHTML = '<h3>Units and Problem Banks</h3><p class="course-problem-help">Select a unit to expand and choose a problem bank.</p>';
 
     var unitList = document.createElement('div');
-    unitList.className = 'course-unit-list';
-    unitSidebar.appendChild(unitList);
+    unitList.className = 'course-unit-list course-unit-accordion-list';
+    unitBankPane.appendChild(unitList);
 
-    var problemPane = document.createElement('div');
-    problemPane.className = 'course-problem-pane';
-    problemPane.innerHTML = '<h3>Select a problem bank</h3><p class="course-problem-help">Choose a unit on the left, then choose a problem bank here.</p>';
-
-    var problemList = document.createElement('div');
-    problemList.className = 'course-problem-list';
-    problemPane.appendChild(problemList);
-
-    browserLayout.appendChild(unitSidebar);
-    browserLayout.appendChild(problemPane);
+    browserLayout.appendChild(unitBankPane);
 
     var workspaceLayout = document.createElement('div');
     workspaceLayout.className = 'course-workspace-layout';
@@ -380,13 +371,95 @@ function generateProblemsPage(classes) {
       renderProblemQuestionList(classContainer, [], {});
     }
 
-    function renderProblemBanksForUnit(unit) {
-      problemList.innerHTML = '';
-
-      var heading = problemPane.querySelector('h3');
-      if (heading) {
-        heading.textContent = 'Unit ' + String((unit.sort_order || 0) + 1) + ' Problem Banks';
+    function setUnitAccordionState(accordionItem, shouldOpen) {
+      if (!accordionItem) {
+        return;
       }
+
+      var headerButton = accordionItem.querySelector('.course-unit-button');
+      var panel = accordionItem.querySelector('.course-unit-panel');
+      var panelInner = accordionItem.querySelector('.course-unit-panel-inner');
+
+      accordionItem.classList.toggle('open', shouldOpen);
+      if (headerButton) {
+        headerButton.classList.toggle('active', shouldOpen);
+        headerButton.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+      }
+      if (panel) {
+        panel.hidden = false;
+        if (shouldOpen) {
+          panel.style.maxHeight = (panelInner ? panelInner.scrollHeight : panel.scrollHeight) + 'px';
+        } else {
+          panel.style.maxHeight = '0px';
+        }
+      }
+    }
+
+    function collapseOtherUnitAccordions(openItem) {
+      unitList.querySelectorAll('.course-unit-accordion.open').forEach(function (item) {
+        if (item !== openItem) {
+          setUnitAccordionState(item, false);
+        }
+      });
+    }
+
+    async function handleProblemBankSelection(bankButton, selectedPath, selectedTitle) {
+      unitList.querySelectorAll('.course-problem-button').forEach(function (node) {
+        node.classList.remove('active');
+      });
+      bankButton.classList.add('active');
+
+      var selectedProblemEl = classContainer.querySelector('.problem-selected-problem');
+      var selectedPathEl = classContainer.querySelector('.problem-selected-path');
+      if (selectedProblemEl) {
+        selectedProblemEl.textContent = selectedPath ? selectedTitle : 'No problem bank selected';
+      }
+      if (selectedPathEl) {
+        selectedPathEl.textContent = selectedPath || '';
+      }
+
+      if (!selectedPath) {
+        renderProblemQuestionList(classContainer, [], {});
+        return;
+      }
+
+      try {
+        var listEl = classContainer.querySelector('.problem-question-list');
+        if (listEl) {
+          listEl.innerHTML = '<p class="problem-browser-empty">Loading questions...</p>';
+        }
+        var result = await getProblemQuestions(selectedPath);
+        renderProblemQuestionList(classContainer, result.questions, result.metadata);
+      } catch (error) {
+        var listElError = classContainer.querySelector('.problem-question-list');
+        if (listElError) {
+          listElError.innerHTML = '<p class="problem-browser-empty">Unable to load questions for this file.</p>';
+        }
+      }
+    }
+
+    sortedUnits.forEach(function (unit, unitIndex) {
+      var unitNumber = (unit.sort_order || unitIndex) + 1;
+      var accordionItem = document.createElement('div');
+      accordionItem.className = 'course-unit-accordion';
+
+      var unitButton = document.createElement('button');
+      unitButton.type = 'button';
+      unitButton.className = 'course-unit-button';
+      unitButton.setAttribute('aria-expanded', 'false');
+      var unitLabel = (unit.name || '').trim() || 'Unit';
+      unitButton.innerHTML = '<span class="course-unit-icon">' + String(unitNumber) + '</span><span class="course-unit-label">' + unitLabel + '</span><span class="course-unit-chevron" aria-hidden="true">\u25be</span>';
+
+      var unitPanel = document.createElement('div');
+      unitPanel.className = 'course-unit-panel';
+      unitPanel.hidden = false;
+      unitPanel.style.maxHeight = '0px';
+
+      var panelInner = document.createElement('div');
+      panelInner.className = 'course-unit-panel-inner';
+
+      var problemList = document.createElement('div');
+      problemList.className = 'course-problem-list';
 
       var problems = Array.isArray(unit.problems) ? unit.problems : [];
       if (!problems.length) {
@@ -394,11 +467,7 @@ function generateProblemsPage(classes) {
         emptyText.className = 'course-problem-empty';
         emptyText.textContent = 'No problem banks are available for this unit.';
         problemList.appendChild(emptyText);
-        resetProblemDetail();
-        return;
       }
-
-      resetProblemDetail();
 
       problems.forEach(function (problem) {
         var selectedPath = problem.yaml_path || '';
@@ -409,67 +478,34 @@ function generateProblemsPage(classes) {
         bankButton.className = 'course-problem-button';
         bankButton.textContent = selectedTitle;
 
-        bankButton.addEventListener('click', async function () {
-          problemList.querySelectorAll('.course-problem-button').forEach(function (node) {
-            node.classList.remove('active');
-          });
-          bankButton.classList.add('active');
-
-          var selectedProblemEl = classContainer.querySelector('.problem-selected-problem');
-          var selectedPathEl = classContainer.querySelector('.problem-selected-path');
-          if (selectedProblemEl) {
-            selectedProblemEl.textContent = selectedPath ? selectedTitle : 'No problem bank selected';
-          }
-          if (selectedPathEl) {
-            selectedPathEl.textContent = selectedPath || '';
-          }
-
-          if (!selectedPath) {
-            renderProblemQuestionList(classContainer, [], {});
-            return;
-          }
-
-          try {
-            var listEl = classContainer.querySelector('.problem-question-list');
-            if (listEl) {
-              listEl.innerHTML = '<p class="problem-browser-empty">Loading questions...</p>';
-            }
-            var result = await getProblemQuestions(selectedPath);
-            renderProblemQuestionList(classContainer, result.questions, result.metadata);
-          } catch (error) {
-            var listElError = classContainer.querySelector('.problem-question-list');
-            if (listElError) {
-              listElError.innerHTML = '<p class="problem-browser-empty">Unable to load questions for this file.</p>';
-            }
-          }
+        bankButton.addEventListener('click', function () {
+          handleProblemBankSelection(bankButton, selectedPath, selectedTitle);
         });
 
         problemList.appendChild(bankButton);
       });
-    }
 
-    sortedUnits.forEach(function (unit, unitIndex) {
-      var unitNumber = (unit.sort_order || unitIndex) + 1;
-      var unitButton = document.createElement('button');
-      unitButton.type = 'button';
-      unitButton.className = 'course-unit-button';
-      var unitLabel = (unit.name || '').trim() || 'Unit';
-      unitButton.innerHTML = '<span class="course-unit-icon">' + String(unitNumber) + '</span><span class="course-unit-label">' + unitLabel + '</span>';
+      panelInner.appendChild(problemList);
+      unitPanel.appendChild(panelInner);
 
       unitButton.addEventListener('click', function () {
-        unitList.querySelectorAll('.course-unit-button').forEach(function (btn) {
-          btn.classList.remove('active');
-        });
-        unitButton.classList.add('active');
-        renderProblemBanksForUnit(unit);
+        var shouldOpen = !accordionItem.classList.contains('open');
+        collapseOtherUnitAccordions(accordionItem);
+        setUnitAccordionState(accordionItem, shouldOpen);
+
+        if (!shouldOpen) {
+          resetProblemDetail();
+        }
       });
 
-      unitList.appendChild(unitButton);
+      accordionItem.appendChild(unitButton);
+      accordionItem.appendChild(unitPanel);
+      unitList.appendChild(accordionItem);
     });
 
-    var defaultUnitButton = unitList.querySelector('.course-unit-button');
-    if (defaultUnitButton) {
-      defaultUnitButton.click();
+    var defaultUnitAccordion = unitList.querySelector('.course-unit-accordion');
+    if (defaultUnitAccordion) {
+      resetProblemDetail();
     } else {
       resetProblemDetail();
     }

@@ -100,8 +100,76 @@
 .tabcontent {
 	display: none;
 	overflow-y: auto;
-	flex-wrap: wrap;
-	gap: 20px;
+	padding-right: 8px;
+}
+
+.problem-accordion-list {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	width: min(760px, 100%);
+}
+
+.problem-accordion {
+	width: 100%;
+	padding: 0;
+	overflow: hidden;
+}
+
+.problem-accordion-toggle {
+	width: 100%;
+	border: none;
+	background: #fafafa;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 14px 46px 14px 14px;
+	cursor: pointer;
+	font-size: 15px;
+	font-weight: 600;
+	text-align: left;
+	border-bottom: 1px solid #ececec;
+}
+
+.problem-accordion-heading {
+	color: #222;
+}
+
+.problem-accordion-chevron {
+	font-size: 16px;
+	transition: transform 0.2s ease;
+}
+
+.problem-accordion.open .problem-accordion-chevron {
+	transform: rotate(180deg);
+}
+
+.problem-accordion-content {
+	padding: 14px;
+	padding-top: 12px;
+}
+
+.problem-accordion-content[hidden] {
+	display: none;
+}
+
+.problem-accordion .problem-info-button {
+	top: 10px;
+	right: 12px;
+	z-index: 2;
+}
+
+.problem-accordion-content h3 {
+	margin: 0 0 8px;
+}
+
+.problem-accordion-content p {
+	margin: 0;
+}
+
+.problem-accordion-content p + p {
+	margin-top: 6px;
 }
 
 .problem-info-button {
@@ -325,4 +393,15 @@
 #clear-cart-btn:hover {
 	background-color: #e0e0e0;
 	color: #333;
+}
+
+@media (max-width: 900px) {
+	.problem-accordion-list {
+		width: 100%;
+	}
+
+	.problem-accordion-toggle {
+		font-size: 14px;
+		padding-left: 12px;
+	}
 }

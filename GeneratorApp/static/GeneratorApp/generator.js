@@ -320,8 +320,45 @@ function switchUnit(evt, unit) {
   for (i = 0; i < tablinks.length; i++) {
     tablinks[i].className = tablinks[i].className.replace(' active', '');
   }
-  document.getElementById(unit).style.display = 'flex';
+  document.getElementById(unit).style.display = 'block';
   evt.currentTarget.className += ' active';
+}
+
+function setProblemAccordionState(accordionItem, shouldOpen) {
+  if (!accordionItem) {
+    return;
+  }
+
+  var toggleButton = accordionItem.querySelector('.problem-accordion-toggle');
+  var contentPanel = accordionItem.querySelector('.problem-accordion-content');
+
+  accordionItem.classList.toggle('open', shouldOpen);
+  if (toggleButton) {
+    toggleButton.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  }
+  if (contentPanel) {
+    contentPanel.hidden = !shouldOpen;
+  }
+}
+
+function toggleProblemAccordion(toggleButton) {
+  var accordionItem = toggleButton.closest('.problem-accordion');
+  if (!accordionItem) {
+    return;
+  }
+
+  var tabContent = toggleButton.closest('.tabcontent');
+  var shouldOpen = !accordionItem.classList.contains('open');
+
+  if (tabContent) {
+    tabContent.querySelectorAll('.problem-accordion.open').forEach(function (openItem) {
+      if (openItem !== accordionItem) {
+        setProblemAccordionState(openItem, false);
+      }
+    });
+  }
+
+  setProblemAccordionState(accordionItem, shouldOpen);
 }
 
 function resetClassSelections(classContainer) {
@@ -509,10 +546,18 @@ function generateGenPage(classes) {
       unitContent.id = 'class' + String(i) + '-unit' + String(j);
       unitContent.className = 'tabcontent';
 
+      var accordionList = document.createElement('div');
+      accordionList.className = 'problem-accordion-list';
+
       unit.problems.forEach(function (problem, problemIndex) {
         var k = problemIndex + 1;
         var problemLayer = document.createElement('div');
-        problemLayer.className = 'probselect';
+        problemLayer.className = 'probselect problem-accordion';
+
+        var accordionHeader = document.createElement('button');
+        accordionHeader.className = 'problem-accordion-toggle';
+        accordionHeader.type = 'button';
+        accordionHeader.setAttribute('aria-expanded', 'false');
 
         var infoButton = document.createElement('button');
         infoButton.className = 'problem-info-button';
@@ -524,8 +569,24 @@ function generateGenPage(classes) {
         infoButton.dataset.problemExample = problem.example || '';
         infoButton.dataset.problemFigureUrl = problem.figure_url || '';
 
+        var headerLabel = document.createElement('span');
+        headerLabel.className = 'problem-accordion-heading';
+        headerLabel.textContent = problem.title || ('Problem Bank ' + String(k));
+
+        var accordionChevron = document.createElement('span');
+        accordionChevron.className = 'problem-accordion-chevron';
+        accordionChevron.setAttribute('aria-hidden', 'true');
+        accordionChevron.textContent = '\u25be';
+
+        accordionHeader.appendChild(headerLabel);
+        accordionHeader.appendChild(accordionChevron);
+
+        var accordionContent = document.createElement('div');
+        accordionContent.className = 'problem-accordion-content';
+        accordionContent.hidden = true;
+
         var problemHeading = document.createElement('h3');
-        problemHeading.textContent = 'Problem ' + String(k);
+        problemHeading.textContent = 'Problem Bank ' + String(k);
 
         var problemTitle = document.createElement('p');
         problemTitle.textContent = problem.title;
@@ -559,14 +620,23 @@ function generateGenPage(classes) {
         problemSelect.appendChild(numberInput);
         problemSelect.appendChild(incrementBtn);
 
-        problemLayer.appendChild(infoButton);
-        problemLayer.appendChild(problemHeading);
-        problemLayer.appendChild(problemTitle);
-        problemLayer.appendChild(problemSubtitle);
-        problemLayer.appendChild(problemSelect);
+        accordionContent.appendChild(problemHeading);
+        accordionContent.appendChild(problemTitle);
+        accordionContent.appendChild(problemSubtitle);
+        accordionContent.appendChild(problemSelect);
 
-        unitContent.appendChild(problemLayer);
+        problemLayer.appendChild(accordionHeader);
+        problemLayer.appendChild(infoButton);
+        problemLayer.appendChild(accordionContent);
+
+        if (problemIndex === 0) {
+          setProblemAccordionState(problemLayer, true);
+        }
+
+        accordionList.appendChild(problemLayer);
       });
+
+      unitContent.appendChild(accordionList);
 
       unitsLayer.appendChild(unitContent);
     });
@@ -580,6 +650,11 @@ function generateGenPage(classes) {
 }
 
 document.addEventListener('click', function (evt) {
+  if (evt.target.closest('.problem-accordion-toggle')) {
+    toggleProblemAccordion(evt.target.closest('.problem-accordion-toggle'));
+    return;
+  }
+
   if (evt.target.id === 'clear-cart-btn') {
     clearCart();
   }
