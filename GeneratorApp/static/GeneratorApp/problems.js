@@ -304,64 +304,121 @@ function generateProblemsPage(classes) {
 
     var backButton = document.createElement('button');
     backButton.className = 'back';
-    backButton.textContent = 'Back to Classes';
+    backButton.textContent = 'Back to Courses';
     backButton.onclick = function () { showClass(i); };
     classContainer.appendChild(backButton);
 
     var classHeading = document.createElement('h2');
     classHeading.className = 'problem-class-heading';
-    classHeading.textContent = cls.name + ' Problem Browser';
+    classHeading.textContent = cls.name + ' Course';
+    classContainer.appendChild(classHeading);
 
-    var selectionPage = document.createElement('div');
-    selectionPage.className = 'problem-selection-page';
-    selectionPage.appendChild(classHeading);
+    var browserLayout = document.createElement('div');
+    browserLayout.className = 'course-browser-layout';
 
-    var unitGrid = document.createElement('div');
-    unitGrid.className = 'problem-unit-grid';
-    var problemPickers = [];
+    var unitSidebar = document.createElement('div');
+    unitSidebar.className = 'course-unit-sidebar';
+    unitSidebar.innerHTML = '<h3>Units</h3>';
 
-    cls.units.forEach(function (unit) {
-      var unitCard = document.createElement('div');
-      unitCard.className = 'probselect problem-unit-card';
+    var unitList = document.createElement('div');
+    unitList.className = 'course-unit-list';
+    unitSidebar.appendChild(unitList);
 
-      var unitTitle = document.createElement('h3');
-      unitTitle.textContent = 'Unit ' + String(unit.sort_order + 1);
+    var problemPane = document.createElement('div');
+    problemPane.className = 'course-problem-pane';
+    problemPane.innerHTML = '<h3>Select a problem bank</h3><p class="course-problem-help">Choose a unit on the left, then choose a problem bank here.</p>';
 
-      var unitName = document.createElement('p');
-      unitName.className = 'problem-unit-name';
-      unitName.textContent = unit.name || '';
+    var problemList = document.createElement('div');
+    problemList.className = 'course-problem-list';
+    problemPane.appendChild(problemList);
 
-      var pickerLabel = document.createElement('p');
-      pickerLabel.className = 'problem-picker-label';
-      pickerLabel.textContent = 'Choose a problem';
+    browserLayout.appendChild(unitSidebar);
+    browserLayout.appendChild(problemPane);
 
-      var pickerWrap = document.createElement('div');
-      pickerWrap.className = 'problem-hover-picker';
+    var workspaceLayout = document.createElement('div');
+    workspaceLayout.className = 'course-workspace-layout';
+    workspaceLayout.appendChild(browserLayout);
 
-      var pickerTrigger = document.createElement('button');
-      pickerTrigger.type = 'button';
-      pickerTrigger.className = 'problem-picker-trigger';
-      pickerTrigger.textContent = 'Select a problem...';
+    var browserPanel = document.createElement('div');
+    browserPanel.className = 'problem-browser-panel';
 
-      var pickerMenu = document.createElement('div');
-      pickerMenu.className = 'problem-hover-menu';
+    var selectedSummary = document.createElement('div');
+    selectedSummary.className = 'problem-selected-summary';
+    selectedSummary.innerHTML = '<p><strong>Selected Problem Bank:</strong> <span class="problem-selected-problem">No problem bank selected</span></p><p class="problem-selected-path"></p>';
+    browserPanel.appendChild(selectedSummary);
 
-      unit.problems.forEach(function (problem) {
+    var split = document.createElement('div');
+    split.className = 'problem-browser-split';
+
+    var listPane = document.createElement('div');
+    listPane.className = 'problem-list-pane';
+    listPane.innerHTML = '<h3>YAML Problems</h3><div class="problem-question-list"><p class="problem-browser-empty">Select a problem bank to view its questions.</p></div>';
+
+    var detailPane = document.createElement('div');
+    detailPane.className = 'problem-detail-pane';
+    detailPane.innerHTML = '<div class="problem-detail-title">No question selected</div><div class="problem-detail-tabs"><button type="button" class="problem-detail-tab active" data-tab="preview">Preview</button><button type="button" class="problem-detail-tab" data-tab="latex">LaTeX Source Code</button><button type="button" class="problem-detail-tab" data-tab="yaml">YAML Source Code</button></div><div class="problem-detail-content" data-tab="preview"><div class="problem-detail-question"></div><img class="problem-detail-figure" alt="Problem figure" style="display: none;" /><div class="problem-detail-answer"></div></div><div class="problem-detail-content" data-tab="latex" style="display: none;"><pre class="problem-detail-latex"></pre></div><div class="problem-detail-content" data-tab="yaml" style="display: none;"><pre class="problem-detail-yaml"></pre></div>';
+
+    split.appendChild(listPane);
+    split.appendChild(detailPane);
+    browserPanel.appendChild(split);
+    workspaceLayout.appendChild(browserPanel);
+    classContainer.appendChild(workspaceLayout);
+
+    var sortedUnits = (cls.units || []).slice().sort(function (a, b) {
+      return (a.sort_order || 0) - (b.sort_order || 0);
+    });
+
+    function resetProblemDetail() {
+      var selectedProblemEl = classContainer.querySelector('.problem-selected-problem');
+      var selectedPathEl = classContainer.querySelector('.problem-selected-path');
+      if (selectedProblemEl) {
+        selectedProblemEl.textContent = 'No problem bank selected';
+      }
+      if (selectedPathEl) {
+        selectedPathEl.textContent = '';
+      }
+      renderProblemQuestionList(classContainer, [], {});
+    }
+
+    function renderProblemBanksForUnit(unit) {
+      problemList.innerHTML = '';
+
+      var heading = problemPane.querySelector('h3');
+      if (heading) {
+        heading.textContent = 'Unit ' + String((unit.sort_order || 0) + 1) + ' Problem Banks';
+      }
+
+      var problems = Array.isArray(unit.problems) ? unit.problems : [];
+      if (!problems.length) {
+        var emptyText = document.createElement('p');
+        emptyText.className = 'course-problem-empty';
+        emptyText.textContent = 'No problem banks are available for this unit.';
+        problemList.appendChild(emptyText);
+        resetProblemDetail();
+        return;
+      }
+
+      resetProblemDetail();
+
+      problems.forEach(function (problem) {
         var selectedPath = problem.yaml_path || '';
-        var selectedTitle = problem.title || problem.code || 'Problem';
+        var selectedTitle = problem.title || problem.code || 'Problem Bank';
 
-        var optionButton = document.createElement('button');
-        optionButton.type = 'button';
-        optionButton.className = 'problem-hover-option';
-        optionButton.textContent = selectedTitle;
+        var bankButton = document.createElement('button');
+        bankButton.type = 'button';
+        bankButton.className = 'course-problem-button';
+        bankButton.textContent = selectedTitle;
 
-        optionButton.addEventListener('click', async function () {
-          pickerTrigger.textContent = selectedTitle;
+        bankButton.addEventListener('click', async function () {
+          problemList.querySelectorAll('.course-problem-button').forEach(function (node) {
+            node.classList.remove('active');
+          });
+          bankButton.classList.add('active');
 
           var selectedProblemEl = classContainer.querySelector('.problem-selected-problem');
           var selectedPathEl = classContainer.querySelector('.problem-selected-path');
           if (selectedProblemEl) {
-            selectedProblemEl.textContent = selectedPath ? selectedTitle : 'No problem selected';
+            selectedProblemEl.textContent = selectedPath ? selectedTitle : 'No problem bank selected';
           }
           if (selectedPathEl) {
             selectedPathEl.textContent = selectedPath || '';
@@ -371,10 +428,6 @@ function generateProblemsPage(classes) {
             renderProblemQuestionList(classContainer, [], {});
             return;
           }
-
-          backButton.style.display = 'none';
-          selectionPage.style.display = 'none';
-          detailPage.style.display = 'block';
 
           try {
             var listEl = classContainer.querySelector('.problem-question-list');
@@ -391,80 +444,35 @@ function generateProblemsPage(classes) {
           }
         });
 
-        pickerMenu.appendChild(optionButton);
+        problemList.appendChild(bankButton);
+      });
+    }
+
+    sortedUnits.forEach(function (unit, unitIndex) {
+      var unitNumber = (unit.sort_order || unitIndex) + 1;
+      var unitButton = document.createElement('button');
+      unitButton.type = 'button';
+      unitButton.className = 'course-unit-button';
+      var unitLabel = (unit.name || '').trim() || 'Unit';
+      unitButton.innerHTML = '<span class="course-unit-icon">' + String(unitNumber) + '</span><span class="course-unit-label">' + unitLabel + '</span>';
+
+      unitButton.addEventListener('click', function () {
+        unitList.querySelectorAll('.course-unit-button').forEach(function (btn) {
+          btn.classList.remove('active');
+        });
+        unitButton.classList.add('active');
+        renderProblemBanksForUnit(unit);
       });
 
-      pickerWrap.appendChild(pickerTrigger);
-      pickerWrap.appendChild(pickerMenu);
-
-      problemPickers.push({
-        trigger: pickerTrigger,
-        defaultLabel: 'Select a problem...',
-      });
-
-      unitCard.appendChild(unitTitle);
-      unitCard.appendChild(unitName);
-      unitCard.appendChild(pickerLabel);
-      unitCard.appendChild(pickerWrap);
-      unitGrid.appendChild(unitCard);
+      unitList.appendChild(unitButton);
     });
 
-    selectionPage.appendChild(unitGrid);
-    classContainer.appendChild(selectionPage);
-
-    var detailPage = document.createElement('div');
-    detailPage.className = 'problem-detail-page';
-    detailPage.style.display = 'none';
-
-    var detailBackButton = document.createElement('button');
-    detailBackButton.className = 'back';
-    detailBackButton.textContent = 'Back to Problem Selection';
-    detailBackButton.onclick = function () {
-      detailPage.style.display = 'none';
-      selectionPage.style.display = 'block';
-      backButton.style.display = 'inline-block';
-
-      problemPickers.forEach(function (pickerInfo) {
-        pickerInfo.trigger.textContent = pickerInfo.defaultLabel;
-      });
-
-      var selectedProblemEl = classContainer.querySelector('.problem-selected-problem');
-      var selectedPathEl = classContainer.querySelector('.problem-selected-path');
-      if (selectedProblemEl) {
-        selectedProblemEl.textContent = 'No problem selected';
-      }
-      if (selectedPathEl) {
-        selectedPathEl.textContent = '';
-      }
-
-      renderProblemQuestionList(classContainer, [], {});
-    };
-    detailPage.appendChild(detailBackButton);
-
-    var browserPanel = document.createElement('div');
-    browserPanel.className = 'problem-browser-panel';
-
-    var selectedSummary = document.createElement('div');
-    selectedSummary.className = 'problem-selected-summary';
-    selectedSummary.innerHTML = '<p><strong>Selected Problem:</strong> <span class="problem-selected-problem">No problem selected</span></p><p class="problem-selected-path"></p>';
-    browserPanel.appendChild(selectedSummary);
-
-    var split = document.createElement('div');
-    split.className = 'problem-browser-split';
-
-    var listPane = document.createElement('div');
-    listPane.className = 'problem-list-pane';
-    listPane.innerHTML = '<h3>YAML Problems</h3><div class="problem-question-list"><p class="problem-browser-empty">Select a problem from a unit to view its questions.</p></div>';
-
-    var detailPane = document.createElement('div');
-    detailPane.className = 'problem-detail-pane';
-    detailPane.innerHTML = '<div class="problem-detail-title">No question selected</div><div class="problem-detail-tabs"><button type="button" class="problem-detail-tab active" data-tab="preview">Preview</button><button type="button" class="problem-detail-tab" data-tab="latex">LaTeX Source Code</button><button type="button" class="problem-detail-tab" data-tab="yaml">YAML Source Code</button></div><div class="problem-detail-content" data-tab="preview"><div class="problem-detail-question"></div><img class="problem-detail-figure" alt="Problem figure" style="display: none;" /><div class="problem-detail-answer"></div></div><div class="problem-detail-content" data-tab="latex" style="display: none;"><pre class="problem-detail-latex"></pre></div><div class="problem-detail-content" data-tab="yaml" style="display: none;"><pre class="problem-detail-yaml"></pre></div>';
-
-    split.appendChild(listPane);
-    split.appendChild(detailPane);
-    browserPanel.appendChild(split);
-    detailPage.appendChild(browserPanel);
-    classContainer.appendChild(detailPage);
+    var defaultUnitButton = unitList.querySelector('.course-unit-button');
+    if (defaultUnitButton) {
+      defaultUnitButton.click();
+    } else {
+      resetProblemDetail();
+    }
 
     classPagesHost.appendChild(classContainer);
   });

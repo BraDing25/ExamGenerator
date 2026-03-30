@@ -83,6 +83,7 @@ chmod u+rw ~/ExamGenerator/db.sqlite3 2>/dev/null || true
 rm -f ~/ExamGenerator/db.sqlite3-wal ~/ExamGenerator/db.sqlite3-shm 2>/dev/null || true
 
 # Fresh staticfiles directory (avoids PermissionError during collectstatic)
+find ~/ExamGenerator -maxdepth 1 -type d -name 'staticfiles_old_*' -exec rm -rf {} + 2>/dev/null || true
 mv ~/ExamGenerator/staticfiles ~/ExamGenerator/staticfiles_old_$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
 mkdir -p ~/ExamGenerator/staticfiles
 chmod -R u+rwX ~/ExamGenerator/staticfiles
@@ -162,9 +163,9 @@ python manage.py shell -c "from GeneratorApp.models import PhysicsClass,Unit,Pro
 ```
 
 Then test website:
-- Open Generator page
-- Try Preview Exam
-- Try Generate Exam
+- Open Problem Sets page (`/problems.html`)
+- Confirm problem classes and units load
+- Note: Home (`/`) and Generator (`/generator.html`) are currently disabled
 
 ## 8) Redeploy updates (routine, direct edits on PythonAnywhere)
 If you edit files directly on PythonAnywhere (Files tab), you usually do not need to re-upload the project.
@@ -182,6 +183,7 @@ pip install -r requirements.txt
 python manage.py migrate
 
 # Rebuild static files if CSS/JS/templates/static assets changed
+find ~/ExamGenerator -maxdepth 1 -type d -name 'staticfiles_old_*' -exec rm -rf {} + 2>/dev/null || true
 mv staticfiles staticfiles_old_$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
 mkdir -p staticfiles
 chmod -R u+rwX staticfiles
@@ -204,6 +206,7 @@ Run:
 
 ```bash
 cd ~/ExamGenerator
+find ~/ExamGenerator -maxdepth 1 -type d -name 'staticfiles_old_*' -exec rm -rf {} + 2>/dev/null || true
 mv staticfiles staticfiles_old_$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
 mkdir -p staticfiles
 chmod -R u+rwX staticfiles
@@ -237,7 +240,7 @@ python manage.py sync_problem_bank
 
 ### D) 403 on `/api/exams/preview/` or `/api/exams/generate/`
 Checklist:
-1. Confirm latest code is deployed (includes CSRF cookie fix in `generator_view`).
+1. Confirm latest code is deployed. If home/generator pages are disabled, these endpoints may not be reachable from the UI.
 2. Confirm `DJANGO_CSRF_TRUSTED_ORIGINS=https://BradyDin25.pythonanywhere.com` is set.
 3. Reload web app.
 4. Hard refresh browser (Ctrl+Shift+R).

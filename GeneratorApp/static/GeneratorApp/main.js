@@ -9,6 +9,7 @@ function showClass(cls) {
   var main = document.getElementById('classes');
   var file = getFileName();
   var pcp = document.getElementById('problem-class-pages');
+  var isProblemsPage = file === 'problems.html' || file === '' || file === 'index.html';
 
   if (!c || !main) {
     return;
@@ -18,7 +19,7 @@ function showClass(cls) {
     c.style.display = 'block';
     main.style.display = 'none';
 
-    if (file === 'problems.html') {
+    if (isProblemsPage) {
       if (pcp) {
         pcp.style.display = 'block';
       }
@@ -35,7 +36,7 @@ function showClass(cls) {
 
     if (file === 'generator.html') {
       main.style.display = 'flex';
-    } else if (file === 'problems.html') {
+    } else if (isProblemsPage) {
       main.style.display = 'block';
       if (pcp) {
         pcp.style.display = 'none';
