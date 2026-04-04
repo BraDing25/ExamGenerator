@@ -1,11 +1,11 @@
-{% load static %}
+{% load static versioned_static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="{% static 'GeneratorApp/main.css' %}">
-    <script src="{% static 'GeneratorApp/main.js' %}" defer></script>
+    <link rel="stylesheet" href="{% versioned_static 'GeneratorApp/main.css' %}">
+    <script src="{% versioned_static 'GeneratorApp/main.js' %}" defer></script>
     {% block staticfiles %}{% endblock %}
     <title>ESTELA Isomorphic Problem Bank</title>
     <script>
@@ -23,7 +23,7 @@
         <header>
             <div class="container">
                 <div class="header-brand">
-                    <img class="header-logo" src="{% static 'GeneratorApp/images/shared/TheTab_KGrgb_72ppi.png' %}" alt="UCF logo">
+                    <img class="header-logo" src="{% versioned_static 'GeneratorApp/images/shared/TheTab_KGrgb_72ppi.png' %}" alt="UCF logo">
                     <div class="header-text">
                         <h1>ESTELA Isomorphic Problem Bank</h1>
                         <p></p>

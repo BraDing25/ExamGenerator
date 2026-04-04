@@ -189,12 +189,12 @@ mkdir -p staticfiles
 chmod -R u+rwX staticfiles
 python manage.py collectstatic --noinput
 
+# If the UI logic, feedback rendering, or problem-bank parsing changed
+python manage.py sync_problem_bank --force
+
 # Good final checks
 python manage.py check --deploy
 python manage.py sync_problem_bank
-
-# If sync/parsing logic changed in code, force rebuild from current repo contents
-python manage.py sync_problem_bank --force
 ```
 
 Then click Reload in the Web tab.
@@ -251,6 +251,19 @@ PythonAnywhere Tasks tab command:
 ```bash
 /home/BradyDin25/.virtualenvs/examgen-env/bin/python /home/BradyDin25/ExamGenerator/manage.py sync_problem_bank
 ```
+
+## 11) If edits still do not appear
+If you changed HTML, CSS, or JS but the live site still shows the old version, check these in order:
+
+```bash
+workon examgen-env
+cd ~/ExamGenerator
+python manage.py collectstatic --noinput
+```
+
+Then in the PythonAnywhere Web tab click Reload. After that, do a hard refresh in the browser with Ctrl+Shift+R.
+
+If the page still looks unchanged, verify you edited the deployed files under `/home/BradyDin25/ExamGenerator`, not a separate local copy. The templates now version static asset URLs automatically, so if the browser still shows old UI it usually means the deployed code path is different or the web app was not reloaded after the change.
 
 ## Notes
 - PDF generation requires `pdflatex`. If unavailable on your PythonAnywhere plan, PDF preview/generation may fail while `.tex` output can still work.
