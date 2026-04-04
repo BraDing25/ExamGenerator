@@ -1,6 +1,134 @@
 /* Problems Page JavaScript */
 var cachedProblemQuestionData = new Map();
 var cachedProblemMetadata = new Map();
+var problemsPageMobileQuery = window.matchMedia('(max-width: 980px)');
+
+function isProblemsPageMobileLayout() {
+  return !!problemsPageMobileQuery && problemsPageMobileQuery.matches;
+}
+
+function syncProblemsPageMobileState(cls, forcedStep) {
+  var classContainer = document.getElementById('class' + String(cls));
+  if (!classContainer) {
+    return;
+  }
+
+  var browserLayout = classContainer.querySelector('.course-browser-layout');
+  var browserPanel = classContainer.querySelector('.problem-browser-panel');
+  var step = forcedStep || classContainer.dataset.problemMobileStep || 'units';
+  var isMobile = isProblemsPageMobileLayout();
+
+  classContainer.classList.toggle('is-mobile-flow', isMobile);
+  classContainer.classList.toggle('problem-mobile-units', isMobile && step === 'units');
+  classContainer.classList.toggle('problem-mobile-problems', isMobile && step === 'problems');
+  classContainer.dataset.problemMobileStep = step;
+
+  if (!browserLayout || !browserPanel) {
+    return;
+  }
+
+  if (!isMobile) {
+    browserLayout.style.display = '';
+    browserPanel.style.display = '';
+    return;
+  }
+
+  browserLayout.style.display = step === 'units' ? '' : 'none';
+  browserPanel.style.display = step === 'problems' ? '' : 'none';
+}
+
+window.syncProblemsPageMobileState = syncProblemsPageMobileState;
+
+function resetProblemsPageSelection(cls) {
+  var classContainer = document.getElementById('class' + String(cls));
+  if (!classContainer) {
+    return;
+  }
+
+  var unitList = classContainer.querySelector('.course-unit-list');
+  var bankButtons = classContainer.querySelectorAll('.course-problem-button');
+
+  bankButtons.forEach(function (button) {
+    button.classList.remove('active');
+  });
+
+  if (unitList) {
+    unitList.querySelectorAll('.course-unit-accordion.open').forEach(function (item) {
+      item.classList.remove('open');
+      var headerButton = item.querySelector('.course-unit-button');
+      var panel = item.querySelector('.course-unit-panel');
+      if (headerButton) {
+        headerButton.classList.remove('active');
+        headerButton.setAttribute('aria-expanded', 'false');
+      }
+      if (panel) {
+        panel.style.maxHeight = '0px';
+      }
+    });
+  }
+
+  classContainer.dataset.problemMobileStep = 'units';
+  classContainer._problemQuestions = [];
+  classContainer._problemMetadata = {};
+  classContainer._problemQuestionIndex = 0;
+
+  if (typeof syncProblemsPageMobileState === 'function') {
+    syncProblemsPageMobileState(cls, 'units');
+  }
+
+  var panel = classContainer.querySelector('.problem-browser-panel');
+  if (panel) {
+    renderProblemQuestionList(classContainer, [], {});
+  }
+}
+
+window.resetProblemsPageSelection = resetProblemsPageSelection;
+
+function updateMobileProblemNav(classContainer) {
+  if (!classContainer) {
+    return;
+  }
+
+  var nav = classContainer.querySelector('.problem-mobile-question-nav');
+  if (!nav) {
+    return;
+  }
+
+  var questions = Array.isArray(classContainer._problemQuestions) ? classContainer._problemQuestions : [];
+  var index = Number(classContainer._problemQuestionIndex || 0);
+  var prevButton = nav.querySelector('.problem-mobile-question-prev');
+  var nextButton = nav.querySelector('.problem-mobile-question-next');
+  var statusEl = nav.querySelector('.problem-mobile-question-status');
+
+  if (statusEl) {
+    statusEl.textContent = questions.length ? (String(index + 1) + ' / ' + String(questions.length)) : '0 / 0';
+  }
+
+  if (prevButton) {
+    prevButton.disabled = !questions.length || index <= 0;
+  }
+  if (nextButton) {
+    nextButton.disabled = !questions.length || index >= questions.length - 1;
+  }
+}
+
+function showMobileProblemQuestion(classContainer, nextIndex) {
+  if (!classContainer) {
+    return;
+  }
+
+  var questions = Array.isArray(classContainer._problemQuestions) ? classContainer._problemQuestions : [];
+  var panel = classContainer.querySelector('.problem-browser-panel');
+  var index = Math.max(0, Math.min(Number(nextIndex || 0), Math.max(questions.length - 1, 0)));
+
+  classContainer._problemQuestionIndex = index;
+
+  if (questions.length && panel) {
+    renderProblemDetail(panel, questions[index], classContainer._problemMetadata || {});
+  }
+
+  updateMobileProblemNav(classContainer);
+}
 
 function syncProblemListPaneHeight(panel) {
   if (!panel) {
@@ -10,37 +138,70 @@ function syncProblemListPaneHeight(panel) {
   var listPane = panel.querySelector('.problem-list-pane');
   var listEl = panel.querySelector('.problem-question-list');
   var detailPane = panel.querySelector('.problem-detail-pane');
+  var splitPane = panel.querySelector('.problem-browser-split');
   var previewContentEl = panel.querySelector('.problem-detail-content[data-tab="preview"]');
   var yamlContentEl = panel.querySelector('.problem-detail-content[data-tab="yaml"]');
   var yamlEl = panel.querySelector('.problem-detail-yaml');
+  var classContainer = panel.closest('.problem-class-page');
+  var mobileProblemsMode = !!(classContainer && classContainer.classList.contains('problem-mobile-problems'));
 
   if (!listPane || !listEl || !detailPane) {
     return;
   }
 
-  if (previewContentEl) {
-    var measuredPreviewHeight = previewContentEl.offsetHeight;
-    if (measuredPreviewHeight > 0) {
-      panel.dataset.previewHeight = String(measuredPreviewHeight);
+  // Mobile problems view uses a single flexible detail pane;
+  // fixed pixel heights create unused gaps, so clear any locks.
+  if (mobileProblemsMode) {
+    listPane.style.height = '0px';
+    listPane.style.maxHeight = '0px';
+    listEl.style.maxHeight = '';
+    detailPane.style.height = '';
+    detailPane.style.maxHeight = '';
+    if (yamlContentEl) {
+      yamlContentEl.style.height = '';
+      yamlContentEl.style.minHeight = '';
+      yamlContentEl.style.maxHeight = '';
     }
+    if (yamlEl) {
+      yamlEl.style.height = '';
+      yamlEl.style.maxHeight = '';
+    }
+    return;
   }
 
-  var savedPreviewHeight = Number(panel.dataset.previewHeight || 0);
-  var previewHeight = Math.max(260, savedPreviewHeight || detailPane.offsetHeight);
+  var lockedHeight = Number(panel.dataset.problemPanelHeightLock || 0);
+
+  if (!lockedHeight) {
+    if (previewContentEl) {
+      var measuredPreviewHeight = previewContentEl.offsetHeight;
+      if (measuredPreviewHeight > 0) {
+        panel.dataset.previewHeight = String(measuredPreviewHeight);
+      }
+    }
+
+    var savedPreviewHeight = Number(panel.dataset.previewHeight || 0);
+    lockedHeight = Math.max(260, savedPreviewHeight || detailPane.offsetHeight);
+    panel.dataset.problemPanelHeightLock = String(lockedHeight);
+  }
+
+  var previewHeight = Math.max(260, lockedHeight);
+  var availableHeight = splitPane ? Math.max(260, splitPane.clientHeight) : previewHeight;
+  var targetHeight = Math.max(previewHeight, availableHeight);
 
   if (yamlContentEl) {
-    yamlContentEl.style.height = previewHeight + 'px';
-    yamlContentEl.style.minHeight = previewHeight + 'px';
-    yamlContentEl.style.maxHeight = previewHeight + 'px';
+    yamlContentEl.style.height = targetHeight + 'px';
+    yamlContentEl.style.minHeight = targetHeight + 'px';
+    yamlContentEl.style.maxHeight = targetHeight + 'px';
   }
   if (yamlEl) {
     yamlEl.style.height = '100%';
     yamlEl.style.maxHeight = '100%';
   }
 
-  var targetHeight = Math.max(260, detailPane.offsetHeight);
   listPane.style.height = targetHeight + 'px';
   listPane.style.maxHeight = targetHeight + 'px';
+  detailPane.style.height = targetHeight + 'px';
+  detailPane.style.maxHeight = targetHeight + 'px';
 
   var paneRect = listPane.getBoundingClientRect();
   var listRect = listEl.getBoundingClientRect();
@@ -141,6 +302,8 @@ function renderProblemDetail(panel, question, metadata) {
     return;
   }
 
+  panel.dataset.problemPanelHeightLock = '';
+
   var titleEl = panel.querySelector('.problem-detail-title');
   var outputEl = panel.querySelector('.problem-detail-question');
   var answerEl = panel.querySelector('.problem-detail-answer');
@@ -232,6 +395,10 @@ function renderProblemQuestionList(classContainer, questions, metadata) {
     return;
   }
 
+  classContainer._problemQuestions = Array.isArray(questions) ? questions : [];
+  classContainer._problemMetadata = metadata || {};
+  classContainer._problemQuestionIndex = 0;
+
   // Store metadata in panel for renderProblemDetail to access
   if (metadata) {
     panel.dataset.problemMetadata = JSON.stringify(metadata);
@@ -250,6 +417,11 @@ function renderProblemQuestionList(classContainer, questions, metadata) {
   listEl.innerHTML = '';
   
   if (!questions.length) {
+    var listPaneEmpty = classContainer.querySelector('.problem-list-pane');
+    if (listPaneEmpty) {
+      listPaneEmpty.style.display = '';
+    }
+
     var emptyState = document.createElement('p');
     emptyState.className = 'problem-browser-empty';
     emptyState.textContent = 'No question entries were found in this YAML file.';
@@ -265,6 +437,25 @@ function renderProblemQuestionList(classContainer, questions, metadata) {
       yaml_source: '',
     }, metadata);
     return;
+  }
+
+  var mobileProblemsMode = isProblemsPageMobileLayout() && classContainer.dataset.problemMobileStep === 'problems';
+
+  if (mobileProblemsMode) {
+    var listPaneMobile = classContainer.querySelector('.problem-list-pane');
+    if (listPaneMobile) {
+      listPaneMobile.style.display = 'none';
+    }
+    listEl.innerHTML = '';
+    showMobileProblemQuestion(classContainer, 0);
+    updateMobileProblemNav(classContainer);
+    syncProblemListPaneHeight(panel);
+    return;
+  }
+
+  var listPaneDesktop = classContainer.querySelector('.problem-list-pane');
+  if (listPaneDesktop) {
+    listPaneDesktop.style.display = '';
   }
 
   questions.forEach(function (question, index) {
@@ -289,6 +480,8 @@ function renderProblemQuestionList(classContainer, questions, metadata) {
   if (firstButton) {
     firstButton.click();
   }
+
+  updateMobileProblemNav(classContainer);
 }
 
 function generateProblemsPage(classes) {
@@ -367,10 +560,15 @@ function generateProblemsPage(classes) {
     var browserPanel = document.createElement('div');
     browserPanel.className = 'problem-browser-panel';
 
-    var selectedSummary = document.createElement('div');
-    selectedSummary.className = 'problem-selected-summary';
-    selectedSummary.innerHTML = '<p><strong>Selected Problem Bank:</strong> <span class="problem-selected-problem">No problem bank selected</span></p><p class="problem-selected-path"></p>';
-    browserPanel.appendChild(selectedSummary);
+    var mobilePanelNav = document.createElement('div');
+    mobilePanelNav.className = 'problem-mobile-nav';
+    mobilePanelNav.innerHTML = '<button type="button" class="problem-mobile-back-to-units">Back to Units</button>';
+    browserPanel.appendChild(mobilePanelNav);
+
+    var mobileQuestionNav = document.createElement('div');
+    mobileQuestionNav.className = 'problem-mobile-question-nav';
+    mobileQuestionNav.innerHTML = '<button type="button" class="problem-mobile-question-prev" aria-label="Previous problem">◀</button><span class="problem-mobile-question-status">0 / 0</span><button type="button" class="problem-mobile-question-next" aria-label="Next problem">▶</button>';
+    browserPanel.appendChild(mobileQuestionNav);
 
     var split = document.createElement('div');
     split.className = 'problem-browser-split';
@@ -388,20 +586,33 @@ function generateProblemsPage(classes) {
     browserPanel.appendChild(split);
     workspaceLayout.appendChild(browserPanel);
     classContainer.appendChild(workspaceLayout);
+    classContainer.dataset.problemMobileStep = 'units';
+
+    var mobileBackToUnitsButton = mobilePanelNav.querySelector('.problem-mobile-back-to-units');
+    if (mobileBackToUnitsButton) {
+      mobileBackToUnitsButton.addEventListener('click', function () {
+        syncProblemsPageMobileState(i, 'units');
+      });
+    }
+
+    var mobileQuestionPrevButton = mobileQuestionNav.querySelector('.problem-mobile-question-prev');
+    var mobileQuestionNextButton = mobileQuestionNav.querySelector('.problem-mobile-question-next');
+    if (mobileQuestionPrevButton) {
+      mobileQuestionPrevButton.addEventListener('click', function () {
+        showMobileProblemQuestion(classContainer, Number(classContainer._problemQuestionIndex || 0) - 1);
+      });
+    }
+    if (mobileQuestionNextButton) {
+      mobileQuestionNextButton.addEventListener('click', function () {
+        showMobileProblemQuestion(classContainer, Number(classContainer._problemQuestionIndex || 0) + 1);
+      });
+    }
 
     var sortedUnits = (cls.units || []).slice().sort(function (a, b) {
       return (a.sort_order || 0) - (b.sort_order || 0);
     });
 
     function resetProblemDetail() {
-      var selectedProblemEl = classContainer.querySelector('.problem-selected-problem');
-      var selectedPathEl = classContainer.querySelector('.problem-selected-path');
-      if (selectedProblemEl) {
-        selectedProblemEl.textContent = 'No problem bank selected';
-      }
-      if (selectedPathEl) {
-        selectedPathEl.textContent = '';
-      }
       renderProblemQuestionList(classContainer, [], {});
     }
 
@@ -438,22 +649,17 @@ function generateProblemsPage(classes) {
     }
 
     async function handleProblemBankSelection(bankButton, selectedPath, selectedTitle) {
+      var classId = String(classContainer.id || '').replace(/^class/, '');
       unitList.querySelectorAll('.course-problem-button').forEach(function (node) {
         node.classList.remove('active');
       });
       bankButton.classList.add('active');
 
-      var selectedProblemEl = classContainer.querySelector('.problem-selected-problem');
-      var selectedPathEl = classContainer.querySelector('.problem-selected-path');
-      if (selectedProblemEl) {
-        selectedProblemEl.textContent = selectedPath ? selectedTitle : 'No problem bank selected';
-      }
-      if (selectedPathEl) {
-        selectedPathEl.textContent = selectedPath || '';
-      }
-
       if (!selectedPath) {
         renderProblemQuestionList(classContainer, [], {});
+        if (classId) {
+          syncProblemsPageMobileState(classId, 'units');
+        }
         return;
       }
 
@@ -464,6 +670,9 @@ function generateProblemsPage(classes) {
         }
         var result = await getProblemQuestions(selectedPath);
         renderProblemQuestionList(classContainer, result.questions, result.metadata);
+        if (classId) {
+          syncProblemsPageMobileState(classId, 'problems');
+        }
       } catch (error) {
         var listElError = classContainer.querySelector('.problem-question-list');
         if (listElError) {
@@ -569,4 +778,17 @@ document.addEventListener('DOMContentLoaded', async function () {
     console.error('Problems page error:', error);
     renderCatalogError(document.getElementById('problem-classes'), 'Unable to load problem bank data.');
   }
+});
+
+window.addEventListener('resize', function () {
+  window.requestAnimationFrame(function () {
+    document.querySelectorAll('.problem-class-page').forEach(function (classContainer) {
+      if (classContainer.style.display === 'block') {
+        var classId = String(classContainer.id || '').replace(/^class/, '');
+        if (classId) {
+          syncProblemsPageMobileState(classId);
+        }
+      }
+    });
+  });
 });

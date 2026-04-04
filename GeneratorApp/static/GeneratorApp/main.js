@@ -23,6 +23,9 @@ function showClass(cls) {
       if (pcp) {
         pcp.style.display = 'block';
       }
+      if (typeof window.syncProblemsPageMobileState === 'function') {
+        window.syncProblemsPageMobileState(cls, 'units');
+      }
     } else if (file === 'generator.html') {
       if (typeof selectFirstUnit === 'function') {
         selectFirstUnit(cls);
@@ -37,6 +40,9 @@ function showClass(cls) {
     if (file === 'generator.html') {
       main.style.display = 'flex';
     } else if (isProblemsPage) {
+      if (typeof window.resetProblemsPageSelection === 'function') {
+        window.resetProblemsPageSelection(cls);
+      }
       main.style.display = 'block';
       if (pcp) {
         pcp.style.display = 'none';
