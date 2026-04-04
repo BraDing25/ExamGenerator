@@ -3,8 +3,11 @@ import json
 import hashlib
 import re
 import tempfile
+import mimetypes
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import quote
+import zipfile
 
 import yaml
 from django.conf import settings
@@ -17,7 +20,7 @@ from django.views.decorators.http import require_GET
 from .models import PhysicsClass, Problem, RepositoryFile, SyncState
 from .services.github_sync import GitHubProblemBankSyncService
 from .utils.exam_builder import ExamBuildError, build_exam_preview_pdf, build_exam_zip
-from .utils.exam_generation import string_to_latex
+from .utils.exam_generation import string_to_latex, string_to_latex_html
 
 
 _MODAL_DATA_BY_SHA = {}
@@ -114,7 +117,65 @@ def _resolve_figure_path(yaml_path, figure_ref, repo_root):
 def _figure_exists(repo_root, figure_path):
 	if not figure_path:
 		return False
-	return repo_root.joinpath(*str(figure_path).split("/")).is_file()
+	figure_str = str(figure_path).replace("\\", "/").strip("/")
+	if not figure_str:
+		return False
+
+	direct_path = repo_root.joinpath(*figure_str.split("/"))
+	if direct_path.is_file():
+		return True
+
+	parent = posixpath.dirname(figure_str)
+	file_name = posixpath.basename(figure_str)
+	if not parent or not file_name:
+		return False
+
+	zip_path = repo_root.joinpath(*parent.split("/")).with_suffix(".zip")
+	if not zip_path.is_file():
+		return False
+
+	try:
+		with zipfile.ZipFile(zip_path, "r") as archive:
+			members = set(archive.namelist())
+			return file_name in members or posixpath.join(posixpath.basename(parent), file_name) in members
+	except (OSError, zipfile.BadZipFile):
+		return False
+
+
+def _read_figure_bytes_from_cache(repo_root, figure_path):
+	"""Read a figure either as a direct file or from a sibling zip archive."""
+	figure_str = str(figure_path or "").replace("\\", "/").strip("/")
+	if not figure_str:
+		return None, None
+
+	direct_path = repo_root.joinpath(*figure_str.split("/"))
+	if direct_path.is_file():
+		return direct_path.read_bytes(), direct_path.name
+
+	parent = posixpath.dirname(figure_str)
+	file_name = posixpath.basename(figure_str)
+	if not parent or not file_name:
+		return None, None
+
+	zip_path = repo_root.joinpath(*parent.split("/")).with_suffix(".zip")
+	if not zip_path.is_file():
+		return None, None
+
+	try:
+		with zipfile.ZipFile(zip_path, "r") as archive:
+			member_candidates = [
+				file_name,
+				posixpath.join(posixpath.basename(parent), file_name),
+			]
+			for member in member_candidates:
+				try:
+					return archive.read(member), file_name
+				except KeyError:
+					continue
+	except (OSError, zipfile.BadZipFile):
+		return None, None
+
+	return None, None
 
 
 def _iter_question_payloads(parsed_yaml):
@@ -136,9 +197,8 @@ def _iter_question_payloads(parsed_yaml):
 
 
 def _extract_question_metadata(question_payload):
-	"""Extract metadata for a single question: answer type, points, and categories."""
+	"""Extract metadata for a single question: answer type and categories."""
 	metadata = {
-		"points": 0,
 		"answer_type": "",
 		"category_count": 0,
 	}
@@ -159,16 +219,6 @@ def _extract_question_metadata(question_payload):
 			metadata["category_count"] = len(categories)
 	elif "text" in question_payload:
 		metadata["answer_type"] = "free_response"
-	
-	# Extract points
-	points = question_payload.get("points")
-	if points is not None:
-		try:
-			metadata["points"] = float(points)
-			if metadata["points"] == int(metadata["points"]):
-				metadata["points"] = int(metadata["points"])
-		except (ValueError, TypeError):
-			metadata["points"] = 0
 	
 	return metadata
 
@@ -253,6 +303,23 @@ def _parse_problem_question_data(yaml_content, yaml_path, repo_root, owner, repo
 		text = str(value).replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
 		text = re.sub(r"[ \t]+", " ", text).strip()
 		return text
+
+	def _clean_multiline_text(value):
+		"""Normalize multiline YAML text while preserving intended paragraph breaks."""
+		if value is None:
+			return ""
+
+		text = str(value).replace("\r\n", "\n").replace("\r", "\n")
+		# Some YAML entries include literal escaped newlines in quoted strings.
+		text = text.replace("\\n", "\n")
+		# Drop markdown line-continuation backslashes at end-of-line.
+		text = re.sub(r"\\[ \t]*\n", "\n", text)
+		# Normalize horizontal spacing per line while preserving line structure.
+		lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n")]
+		text = "\n".join(lines)
+		# Avoid excessive vertical whitespace while keeping readable paragraphs.
+		text = re.sub(r"\n{3,}", "\n\n", text)
+		return text.strip()
 
 	def _normalize_letter(raw_letter, fallback_index):
 		candidate = _clean_text(raw_letter).upper()
@@ -475,13 +542,30 @@ def _parse_problem_question_data(yaml_content, yaml_path, repo_root, owner, repo
 
 		return "\n".join([f"- {item}" for item in answers])
 
+	def _extract_general_feedback_text(question_payload):
+		if not isinstance(question_payload, dict):
+			return ""
+
+		feedback = question_payload.get("feedback")
+		if isinstance(feedback, dict):
+			general_feedback = _clean_multiline_text(feedback.get("general"))
+			if general_feedback:
+				return general_feedback
+		elif isinstance(feedback, str):
+			feedback_text = _clean_multiline_text(feedback)
+			if feedback_text:
+				return feedback_text
+
+		# Compatibility fallback for non-standard key naming.
+		return _clean_multiline_text(question_payload.get("general_feedback") or "")
+
 	def _build_output_text(question_payload):
 		if not isinstance(question_payload, dict):
-			return _clean_text(question_payload)
+			return _clean_multiline_text(question_payload)
 
-		stem = _clean_text(question_payload.get("text") or question_payload.get("title") or question_payload.get("question") or "")
+		stem = _clean_multiline_text(question_payload.get("text") or question_payload.get("title") or question_payload.get("question") or "")
 		if not stem:
-			stem = _clean_text(question_payload)
+			stem = _clean_multiline_text(question_payload)
 
 		choice_records = _extract_choice_records(question_payload)
 		if not choice_records:
@@ -514,6 +598,7 @@ def _parse_problem_question_data(yaml_content, yaml_path, repo_root, owner, repo
 			output_source = _build_output_text(payload)
 
 			answer_text = _extract_answer_text(payload)
+			general_feedback_text = _extract_general_feedback_text(payload)
 
 			figure_ref = payload.get("figure")
 			if isinstance(figure_ref, str) and figure_ref.strip():
@@ -524,10 +609,12 @@ def _parse_problem_question_data(yaml_content, yaml_path, repo_root, owner, repo
 			yaml_source = yaml.safe_dump(payload, sort_keys=False, default_flow_style=False, allow_unicode=False).strip()
 		else:
 			output_source = _build_output_text(payload)
+			general_feedback_text = ""
 			yaml_source = str(payload)
 
 		latex_source = string_to_latex(output_source) if output_source else ""
 		answer_latex = string_to_latex(answer_text) if answer_text else ""
+		general_feedback_latex = string_to_latex(general_feedback_text) if general_feedback_text else ""
 
 		# Extract per-question metadata
 		question_metadata = _extract_question_metadata(payload)
@@ -538,10 +625,10 @@ def _parse_problem_question_data(yaml_content, yaml_path, repo_root, owner, repo
 				"label": label,
 				"output": latex_source,
 				"answer": answer_latex,
+				"general_feedback": general_feedback_latex,
 				"figure_url": figure_url,
 				"latex_source": latex_source,
 				"yaml_source": yaml_source,
-				"points": question_metadata["points"],
 				"answer_type": question_metadata["answer_type"],
 				"category_count": question_metadata["category_count"],
 			}
@@ -720,10 +807,15 @@ def problem_figure_api(request):
 	except ValueError as exc:
 		raise Http404("Invalid figure path.") from exc
 
-	if not target_path.is_file():
+	if target_path.is_file():
+		return FileResponse(open(target_path, "rb"))
+
+	data, filename = _read_figure_bytes_from_cache(local_repo_root, figure_path)
+	if data is None:
 		raise Http404("Figure not found.")
 
-	return FileResponse(open(target_path, "rb"))
+	content_type = mimetypes.guess_type(filename or figure_path)[0] or "application/octet-stream"
+	return FileResponse(BytesIO(data), content_type=content_type)
 
 
 @require_GET

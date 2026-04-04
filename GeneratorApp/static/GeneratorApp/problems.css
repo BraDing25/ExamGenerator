@@ -279,6 +279,54 @@
 	padding: 10px;
 }
 
+.problem-detail-feedback {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	background: #f7f7f7;
+	border: 1px solid #e3e3e3;
+	border-radius: 8px;
+	padding: 10px;
+	margin-top: 10px;
+}
+
+.problem-detail-feedback p {
+	margin: 0 0 10px;
+}
+
+.problem-detail-feedback p:last-child {
+	margin-bottom: 0;
+}
+
+.problem-detail-feedback ul,
+.problem-detail-feedback ol {
+	margin: 6px 0 10px;
+	padding-left: 22px;
+}
+
+.problem-detail-feedback li {
+	margin: 3px 0;
+}
+
+.problem-detail-feedback table {
+	width: 100%;
+	border-collapse: collapse;
+	margin: 6px 0 10px;
+	font-size: 14px;
+}
+
+.problem-detail-feedback th,
+.problem-detail-feedback td {
+	border: 1px solid #d7d7d7;
+	padding: 6px 8px;
+	text-align: left;
+	vertical-align: top;
+}
+
+.problem-detail-feedback th {
+	background: #efefef;
+	font-weight: 700;
+}
+
 .problem-detail-tabs {
 	display: flex;
 	gap: 8px;
@@ -388,8 +436,8 @@
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	border: none;
-	border-radius: 0;
+	border: 1px solid transparent;
+	border-radius: 8px;
 	background: #fafafa;
 	padding: 7px 9px;
 	text-align: left;
@@ -442,7 +490,12 @@
 .course-unit-button.active {
 	border-color: #FFB81C;
 	background: #fff5de;
-	box-shadow: inset 0 0 0 1px #FFB81C;
+	box-shadow: none;
+}
+
+.course-unit-accordion.open .course-unit-button {
+	border-bottom-left-radius: 0;
+	border-bottom-right-radius: 0;
 }
 
 .course-unit-button.active .course-unit-icon {

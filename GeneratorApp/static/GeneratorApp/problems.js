@@ -99,6 +99,43 @@ function activateProblemDetailTab(panel, tabName) {
   });
 }
 
+function typesetProblemMath(panel, elements, attempt) {
+  var maxAttempts = 25;
+  var retryDelayMs = 120;
+  var nodes = (elements || []).filter(function (el) {
+    return !!el;
+  });
+
+  if (!nodes.length) {
+    syncProblemListPaneHeight(panel);
+    return;
+  }
+
+  if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
+    if (typeof window.MathJax.typesetClear === 'function') {
+      window.MathJax.typesetClear(nodes);
+    }
+    window.MathJax.typesetPromise(nodes)
+      .then(function () {
+        syncProblemListPaneHeight(panel);
+      })
+      .catch(function (err) {
+        console.error('MathJax typeset error:', err);
+        syncProblemListPaneHeight(panel);
+      });
+    return;
+  }
+
+  if ((attempt || 0) < maxAttempts) {
+    window.setTimeout(function () {
+      typesetProblemMath(panel, nodes, (attempt || 0) + 1);
+    }, retryDelayMs);
+    return;
+  }
+
+  syncProblemListPaneHeight(panel);
+}
+
 function renderProblemDetail(panel, question, metadata) {
   if (!panel || !question) {
     return;
@@ -107,6 +144,7 @@ function renderProblemDetail(panel, question, metadata) {
   var titleEl = panel.querySelector('.problem-detail-title');
   var outputEl = panel.querySelector('.problem-detail-question');
   var answerEl = panel.querySelector('.problem-detail-answer');
+  var feedbackEl = panel.querySelector('.problem-detail-feedback');
   var figureEl = panel.querySelector('.problem-detail-figure');
   var latexEl = panel.querySelector('.problem-detail-latex');
   var yamlEl = panel.querySelector('.problem-detail-yaml');
@@ -122,16 +160,12 @@ function renderProblemDetail(panel, question, metadata) {
       var answerHTML = '<strong>Correct Answer:</strong> ' + (question.answer || 'Not provided in this item.');
       
       // Add per-question metadata if available
-      if (question.answer_type || (question.points !== undefined && question.points > 0) || (question.category_count !== undefined && question.category_count > 0)) {
+      if (question.answer_type || (question.category_count !== undefined && question.category_count > 0)) {
         answerHTML += '<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">';
         
         if (question.answer_type) {
           var answerTypeDisplay = question.answer_type.replace(/_/g, ' ').charAt(0).toUpperCase() + question.answer_type.slice(1).replace(/_/g, ' ').toLowerCase();
           answerHTML += '<div style="margin-bottom: 6px;"><strong>Answer Type:</strong> ' + answerTypeDisplay + '</div>';
-        }
-        
-        if (question.points !== undefined && question.points > 0) {
-          answerHTML += '<div style="margin-bottom: 6px;"><strong>Points Worth:</strong> ' + question.points + '</div>';
         }
         
         if (question.category_count !== undefined && question.category_count > 0) {
@@ -144,41 +178,40 @@ function renderProblemDetail(panel, question, metadata) {
       answerEl.innerHTML = answerHTML;
     }
 
-    if (figureEl) {
-      figureEl.onload = function () {
-        syncProblemListPaneHeight(panel);
-      };
-      figureEl.onerror = function () {
-        syncProblemListPaneHeight(panel);
-      };
-
-      if (question.figure_url) {
-        figureEl.src = question.figure_url;
-        figureEl.style.display = 'block';
-
-        if (figureEl.complete) {
-          syncProblemListPaneHeight(panel);
-        }
+    if (feedbackEl) {
+      if (question.general_feedback) {
+        feedbackEl.innerHTML = question.general_feedback;
       } else {
-        figureEl.removeAttribute('src');
-        figureEl.style.display = 'none';
-        syncProblemListPaneHeight(panel);
+        feedbackEl.innerHTML = 'No solution steps were provided in this item.';
       }
     }
 
-    if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
-      if (typeof window.MathJax.typesetClear === 'function') {
-        window.MathJax.typesetClear([outputEl, answerEl]);
+    typesetProblemMath(panel, [outputEl, answerEl, feedbackEl], 0);
+  }
+
+  if (figureEl) {
+    var figureUrl = (question.figure_url || '').trim();
+    figureEl.onload = function () {
+      syncProblemListPaneHeight(panel);
+    };
+    figureEl.onerror = function () {
+      figureEl.style.display = 'none';
+      syncProblemListPaneHeight(panel);
+    };
+
+    if (figureUrl) {
+      if (figureEl.getAttribute('src') !== figureUrl) {
+        figureEl.removeAttribute('src');
       }
-      window.MathJax.typesetPromise([outputEl, answerEl])
-        .then(function () {
-          syncProblemListPaneHeight(panel);
-        })
-        .catch(function (err) {
-          console.error('MathJax typeset error:', err);
-          syncProblemListPaneHeight(panel);
-        });
+      figureEl.src = figureUrl;
+      figureEl.style.display = 'block';
+
+      if (figureEl.complete) {
+        syncProblemListPaneHeight(panel);
+      }
     } else {
+      figureEl.removeAttribute('src');
+      figureEl.style.display = 'none';
       syncProblemListPaneHeight(panel);
     }
   }
@@ -226,6 +259,7 @@ function renderProblemQuestionList(classContainer, questions, metadata) {
       label: 'No question selected',
       output: '',
       answer: '',
+      general_feedback: '',
       figure_url: '',
       latex_source: '',
       yaml_source: '',
@@ -347,7 +381,7 @@ function generateProblemsPage(classes) {
 
     var detailPane = document.createElement('div');
     detailPane.className = 'problem-detail-pane';
-    detailPane.innerHTML = '<div class="problem-detail-title">No question selected</div><div class="problem-detail-tabs"><button type="button" class="problem-detail-tab active" data-tab="preview">Preview</button><button type="button" class="problem-detail-tab" data-tab="latex">LaTeX Source Code</button><button type="button" class="problem-detail-tab" data-tab="yaml">YAML Source Code</button></div><div class="problem-detail-content" data-tab="preview"><div class="problem-detail-question"></div><img class="problem-detail-figure" alt="Problem figure" style="display: none;" /><div class="problem-detail-answer"></div></div><div class="problem-detail-content" data-tab="latex" style="display: none;"><pre class="problem-detail-latex"></pre></div><div class="problem-detail-content" data-tab="yaml" style="display: none;"><pre class="problem-detail-yaml"></pre></div>';
+    detailPane.innerHTML = '<div class="problem-detail-title">No question selected</div><div class="problem-detail-tabs"><button type="button" class="problem-detail-tab active" data-tab="preview">Preview</button><button type="button" class="problem-detail-tab" data-tab="how-to-solve">How to Solve</button><button type="button" class="problem-detail-tab" data-tab="latex">LaTeX Source Code</button><button type="button" class="problem-detail-tab" data-tab="yaml">YAML Source Code</button></div><div class="problem-detail-content" data-tab="preview"><div class="problem-detail-question"></div><img class="problem-detail-figure" alt="Problem figure" style="display: none;" /><div class="problem-detail-answer"></div></div><div class="problem-detail-content" data-tab="how-to-solve" style="display: none;"><div class="problem-detail-feedback"></div></div><div class="problem-detail-content" data-tab="latex" style="display: none;"><pre class="problem-detail-latex"></pre></div><div class="problem-detail-content" data-tab="yaml" style="display: none;"><pre class="problem-detail-yaml"></pre></div>';
 
     split.appendChild(listPane);
     split.appendChild(detailPane);
