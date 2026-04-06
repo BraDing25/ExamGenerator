@@ -222,7 +222,8 @@ async function getProblemQuestions(yamlPath) {
     };
   }
 
-  var response = await fetch('/api/problems/questions/?yaml_path=' + encodeURIComponent(yamlPath), {
+  var questionsApi = (window.appUrls && window.appUrls.problem_questions_api) || '/api/problems/questions/';
+  var response = await fetch(questionsApi + '?yaml_path=' + encodeURIComponent(yamlPath), {
     headers: { Accept: 'application/json' },
   });
 

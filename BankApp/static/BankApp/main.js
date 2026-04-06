@@ -4,6 +4,13 @@ function getFileName() {
   return path.substring(path.lastIndexOf('/') + 1);
 }
 
+function getAppUrl(name, fallback) {
+  if (window.appUrls && window.appUrls[name]) {
+    return window.appUrls[name];
+  }
+  return fallback;
+}
+
 function showClass(cls) {
   var c = document.getElementById('class' + String(cls));
   var main = document.getElementById('classes');
@@ -79,7 +86,7 @@ async function getCatalogData() {
     console.warn('Catalog session cache read failed:', error);
   }
 
-  var response = await fetch('/api/catalog/', { headers: { Accept: 'application/json' } });
+  var response = await fetch(getAppUrl('catalog_api', '/api/catalog/'), { headers: { Accept: 'application/json' } });
   if (!response.ok) {
     throw new Error('API returned ' + response.status + ': ' + response.statusText);
   }
@@ -141,7 +148,7 @@ async function setupFooterLastSync() {
   }
 
   try {
-    var response = await fetch('/api/sync/status/', { headers: { Accept: 'application/json' } });
+    var response = await fetch(getAppUrl('sync_status_api', '/api/sync/status/'), { headers: { Accept: 'application/json' } });
     if (!response.ok) {
       footerEl.textContent = 'Last Sync: Unavailable';
       return;

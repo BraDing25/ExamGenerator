@@ -13,6 +13,7 @@ import yaml
 from django.conf import settings
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.urls import reverse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.http import require_GET
@@ -60,7 +61,7 @@ def _build_local_figure_url(figure_path):
 	if not figure_path:
 		return ""
 	encoded = quote(str(figure_path).strip(), safe="/")
-	return f"/api/problem-figure/?path={encoded}"
+	return f"{reverse('problem_figure_api')}?path={encoded}"
 
 
 def _resolve_figure_path(yaml_path, figure_ref, repo_root):

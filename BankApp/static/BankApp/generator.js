@@ -85,7 +85,8 @@ async function handleGenerateExamClick() {
   button.textContent = 'Generating...';
 
   try {
-    var response = await fetch('/api/exams/generate/', {
+    var generateApi = (window.appUrls && window.appUrls.generate_exams_api) || '/api/exams/generate/';
+    var response = await fetch(generateApi, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -150,7 +151,8 @@ async function handlePreviewExamClick() {
   button.textContent = 'Building Preview...';
 
   try {
-    var response = await fetch('/api/exams/preview/', {
+    var previewApi = (window.appUrls && window.appUrls.preview_exam_api) || '/api/exams/preview/';
+    var response = await fetch(previewApi, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

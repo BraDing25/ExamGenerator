@@ -15,6 +15,16 @@
                 displayMath: [['$$', '$$'], ['\\[', '\\]']]
             }
         };
+        window.appUrls = {
+            home: "{% url 'home' %}",
+            problems: "{% url 'problems' %}",
+            generator: "{% url 'generator' %}",
+            catalog_api: "{% url 'catalog_api' %}",
+            problem_questions_api: "{% url 'problem_questions_api' %}",
+            generate_exams_api: "{% url 'generate_exams_api' %}",
+            preview_exam_api: "{% url 'preview_exam_api' %}",
+            sync_status_api: "{% url 'sync_status_api' %}"
+        };
     </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
