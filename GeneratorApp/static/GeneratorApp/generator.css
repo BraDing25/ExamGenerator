@@ -4,7 +4,7 @@
 	display: none;
 	align-items: center;
 	justify-content: center;
-	background: rgba(31, 29, 35, 0.55);
+	background: rgba(17, 24, 34, 0.62);
 	z-index: 1200;
 	padding: min(1.25em, 4%);
 }
@@ -17,9 +17,10 @@
 	width: min(720px, 100%);
 	max-height: 90dvh;
 	overflow-y: auto;
-	background: #fff;
+	background: linear-gradient(180deg, #ffffff 0%, #f7fafd 100%);
 	border-radius: 0.75rem;
-	box-shadow: 0 20px 40px rgba(31, 29, 35, 0.2);
+	border: 1px solid var(--theme-border);
+	box-shadow: 0 24px 46px rgba(18, 29, 43, 0.28);
 	padding: min(1.25em, 4%);
 	position: relative;
 }
@@ -48,6 +49,7 @@
 	right: 0.625rem;
 	border: none;
 	background: transparent;
+	color: #4b5563;
 	font-size: 1.625rem;
 	line-height: 1;
 	cursor: pointer;
@@ -72,14 +74,14 @@
 	flex-wrap: wrap;
 	margin-top: 1.25rem;
 	margin-bottom: 0.9375rem;
-	border-bottom: 1px solid #b2b2b2;
+	border-bottom: 1px solid var(--theme-border);
 	width: fit-content;
 }
 
 .tabs button {
 	width: 6.875rem;
-	background-color: #f7f7f7;
-	color: #333;
+	background: linear-gradient(180deg, #ffffff 0%, #eef3f8 100%);
+	color: #4b5664;
 	border: none;
 	padding: min(0.7em, 2.2%) min(1.1em, 3.6%);
 	font-size: 0.875rem;
@@ -89,12 +91,12 @@
 }
 
 .tabs button:hover {
-	background-color: #e0e0e0;
+	background: linear-gradient(180deg, #f8fbff 0%, #e6edf5 100%);
 }
 
 .tabs button.active {
-	background-color: #FFB81C;
-	color: var(--ucf-black);
+	background: linear-gradient(180deg, #ffd268 0%, var(--estela-gold) 100%);
+	color: #2f2410;
 }
 
 .tabcontent {
@@ -119,7 +121,7 @@
 .problem-accordion-toggle {
 	width: 100%;
 	border: none;
-	background: #fafafa;
+	background: linear-gradient(180deg, #ffffff 0%, #f2f6fb 100%);
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -129,11 +131,11 @@
 	font-size: 0.9375rem;
 	font-weight: 600;
 	text-align: left;
-	border-bottom: 1px solid #ececec;
+	border-bottom: 1px solid var(--theme-border);
 }
 
 .problem-accordion-heading {
-	color: #222;
+	color: #273545;
 }
 
 .problem-accordion-chevron {
@@ -179,10 +181,10 @@
 	right: 0.5rem;
 	width: 1.5rem;
 	height: 1.5rem;
-	border: 1px solid #bbb;
+	border: 1px solid #c4ced9;
 	border-radius: 50%;
-	background: #fff;
-	color: #444;
+	background: #f8fbff;
+	color: #445567;
 	font-size: 0.875rem;
 	font-weight: 700;
 	line-height: 1;
@@ -190,8 +192,8 @@
 }
 
 .problem-info-button:hover {
-	background: #f2f2f2;
-	border-color: #999;
+	background: #ebf1f7;
+	border-color: #9db0c5;
 }
 
 .quantselect {
@@ -202,8 +204,8 @@
 }
 
 .quantselect button {
-	background-color: #f0f0f0;
-	color: #333;
+	background: linear-gradient(180deg, #ffffff 0%, #ecf1f6 100%);
+	color: #2f3e4c;
 	border: none;
 	border-radius: 0.625rem;
 	padding: min(0.45em, 1.6%) min(0.8em, 2.8%);
@@ -214,11 +216,11 @@
 }
 
 .quantselect button:hover {
-	background-color: #e0e0e0;
+	background: linear-gradient(180deg, #f8fbff 0%, #e2eaf3 100%);
 }
 
 .quantselect button:active {
-	background-color: #c0c0c0;
+	background: #d4deea;
 }
 
 .quantselect input {
@@ -226,7 +228,7 @@
 	text-align: center;
 	font-size: 0.875rem;
 	font-weight: 600;
-	border: 1px solid #ddd;
+	border: 1px solid var(--theme-border);
 	border-radius: 0.3125rem;
 	padding: min(0.4em, 1.4%);
 }
@@ -241,21 +243,22 @@
 #shoppingcart {
 	display: flex;
 	flex-direction: column;
-	background-color: #f5f5f5;
-	border: 1px solid #ddd;
+	background: linear-gradient(180deg, #ffffff 0%, #f2f6fb 100%);
+	border: 1px solid var(--theme-border);
 	padding: min(1.1em, 3.8%);
 	margin-top: 2.5rem;
 	border-radius: 0.625rem;
 	flex: 0 0 400px;
 	height: calc(100dvh - 19.75rem);
+	box-shadow: 0 12px 30px rgba(21, 34, 50, 0.1);
 }
 
 #cart {
 	margin-top: 1.25rem;
 	display: flex;
 	flex-direction: column;
-	background-color: white;
-	border: 1px solid #ddd;
+	background-color: #ffffff;
+	border: 1px solid var(--theme-border);
 	border-radius: 0.625rem;
 	padding: min(0.8em, 2.8%);
 	height: 100%;
@@ -318,7 +321,7 @@
 	display: block;
 	font-size: 0.8125rem;
 	font-weight: 600;
-	color: #333;
+	color: #3a4a5a;
 	margin-bottom: 0.375rem;
 	justify-self: center;
 }
@@ -330,8 +333,8 @@
 }
 
 .exam-count-controls button {
-	background-color: #dedede;
-	color: #333;
+	background: linear-gradient(180deg, #ffffff 0%, #e8edf3 100%);
+	color: #314152;
 	border: none;
 	border-radius: 0.625rem;
 	padding: min(0.45em, 1.6%) min(0.8em, 2.8%);
@@ -343,12 +346,12 @@
 
 .exam-count-controls button:hover,
 #preview-button:hover {
-	background-color: #d2d2d2;
+	background: linear-gradient(180deg, #f6f9fc 0%, #dfe7f0 100%);
 }
 
 .exam-count-controls button:active,
 #preview-button:active {
-	background-color: #a9a9a9;
+	background: #c8d4e2;
 }
 
 .exam-count-controls input {
@@ -356,7 +359,7 @@
 	text-align: center;
 	font-size: 0.875rem;
 	font-weight: 600;
-	border: 1px solid #ddd;
+	border: 1px solid var(--theme-border);
 	border-radius: 0.3125rem;
 	padding: min(0.4em, 1.4%);
 }
@@ -364,8 +367,8 @@
 #preview-button {
 	width: auto;
 	margin-top: 0;
-	background-color: #dedede;
-	color: #333;
+	background: linear-gradient(180deg, #ffffff 0%, #e8edf3 100%);
+	color: #2f3f50;
 	padding: min(0.7em, 2.2%) min(1em, 3.4%);
 }
 
@@ -383,7 +386,7 @@
 #clear-cart-btn {
 	background: none;
 	border: none;
-	color: #888;
+	color: #6a7685;
 	font-size: 0.75rem;
 	font-weight: 600;
 	cursor: pointer;
@@ -393,8 +396,8 @@
 }
 
 #clear-cart-btn:hover {
-	background-color: #e0e0e0;
-	color: #333;
+	background-color: #e8eef5;
+	color: #314357;
 }
 
 @media (max-width: 900px) {
