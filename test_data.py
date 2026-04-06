@@ -2,10 +2,10 @@ import os
 import sys
 import django
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ExamGenerator.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ProblemBank.settings')
 django.setup()
 
-from GeneratorApp.models import PhysicsClass
+from BankApp.models import PhysicsClass
 
 classes = list(PhysicsClass.objects.prefetch_related('units__problems').all())
 print(f"Total classes in DB: {len(classes)}")

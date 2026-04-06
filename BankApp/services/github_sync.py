@@ -12,8 +12,8 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
-from GeneratorApp.models import PhysicsClass, Problem, RepositoryFile, SyncState, Unit
-from GeneratorApp.utils.exam_generation import string_to_latex
+from BankApp.models import PhysicsClass, Problem, RepositoryFile, SyncState, Unit
+from BankApp.utils.exam_generation import string_to_latex
 
 UNIT_DIR_PATTERN = re.compile(r"^(\d+)_")
 YAML_EXTENSIONS = (".yml", ".yaml")

@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from GeneratorApp.services.github_sync import GitHubProblemBankSyncService
+from BankApp.services.github_sync import GitHubProblemBankSyncService
 
 
 class Command(BaseCommand):

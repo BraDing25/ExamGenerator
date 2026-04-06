@@ -1,9 +1,9 @@
-{% extends 'GeneratorApp/base.html' %}
+{% extends 'BankApp/base.html' %}
 {% load static versioned_static %}
 
 {% block staticfiles %}
-    <link rel="stylesheet" href="{% versioned_static 'GeneratorApp/problems.css' %}">
-    <script src="{% versioned_static 'GeneratorApp/problems.js' %}" defer></script>
+    <link rel="stylesheet" href="{% versioned_static 'BankApp/problems.css' %}">
+    <script src="{% versioned_static 'BankApp/problems.js' %}" defer></script>
 {% endblock %}
 
 {% block content %}

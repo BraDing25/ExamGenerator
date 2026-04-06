@@ -10,7 +10,7 @@ register = template.Library()
 @register.simple_tag
 def versioned_static(asset_path):
     asset_url = static(asset_path)
-    source_path = Path(settings.BASE_DIR) / "GeneratorApp" / "static" / Path(asset_path)
+    source_path = Path(settings.BASE_DIR) / "BankApp" / "static" / Path(asset_path)
 
     try:
         version = str(int(source_path.stat().st_mtime))

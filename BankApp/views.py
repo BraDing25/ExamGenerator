@@ -663,16 +663,16 @@ def _load_modal_cache(owner, repo):
 
 
 def home_view(request):
-	return render(request, "GeneratorApp/index.html")
+	return render(request, "BankApp/index.html")
 
 
 def problems_view(request):
-	return render(request, "GeneratorApp/problems.html")
+	return render(request, "BankApp/problems.html")
 
 
 @ensure_csrf_cookie
 def generator_view(request):
-	return render(request, "GeneratorApp/generator.html")
+	return render(request, "BankApp/generator.html")
 
 
 @require_GET
