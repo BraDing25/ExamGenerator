@@ -131,17 +131,17 @@ Save the WSGI file.
 
 ## 7) Add Environment Variables (Security + Settings)
 
-In Web tab -> Environment variables, add these keys and values:
+In the WSGI file, add these keys and values:
 
 ```text
-DJANGO_DEBUG=false
-DJANGO_SECRET_KEY=<GENERATE_A_NEW_SECRET_KEY>
-DJANGO_ALLOWED_HOSTS=<PA_USERNAME>.pythonanywhere.com
-DJANGO_CSRF_TRUSTED_ORIGINS=https://<PA_USERNAME>.pythonanywhere.com
-DJANGO_SECURE_SSL_REDIRECT=true
-DJANGO_SECURE_HSTS_SECONDS=31536000
-DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS=true
-DJANGO_SECURE_HSTS_PRELOAD=false
+os.environ.setdefault('DJANGO_DEBUG', 'false')
+os.environ.setdefault('DJANGO_SECRET_KEY', '<GENERATE_A_NEW_SECRET_KEY>')
+os.environ.setdefault('DJANGO_ALLOWED_HOSTS', '<PA_USERNAME>.pythonanywhere.com')
+os.environ.setdefault('DJANGO_CSRF_TRUSTED_ORIGINS', 'https://<PA_USERNAME>.pythonanywhere.com')
+os.environ.setdefault('DJANGO_SECURE_SSL_REDIRECT', 'true')
+os.environ.setdefault('DJANGO_SECURE_HSTS_SECONDS', '31536000')
+os.environ.setdefault('DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS', 'true')
+os.environ.setdefault('DJANGO_SECURE_HSTS_PRELOAD', 'false')
 ```
 
 Generate a secure secret key in Bash:
