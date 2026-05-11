@@ -71,14 +71,7 @@ cat ~/.ssh/id_ed25519.pub
 
 ```bash
 cd /home/<PA_USERNAME>
-git clone git@github.com:<GITHUB_USERNAME>/ProblemBank.git
-```
-
-HTTPS method (if you prefer):
-
-```bash
-cd /home/<PA_USERNAME>
-git clone https://github.com/<GITHUB_USERNAME>/ProblemBank.git
+git clone <ssh_link>
 ```
 
 If the repo is private, use a personal access token (PAT) or configure `git` credentials securely. Don't embed tokens in scripts.
@@ -292,7 +285,7 @@ workon problembank-env
 cd /home/<PA_USERNAME>/ProblemBank
 
 # fetch latest code
-git pull origin main
+git pull
 
 # install any new/updated dependencies
 pip install -r requirements.txt
