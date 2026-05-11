@@ -32,26 +32,58 @@ After account creation, note these values:
 
 ---
 
-## 2) Upload Your Project ZIP
+## 2) Link the Project to GitHub and Clone on PythonAnywhere
 
-1. In PythonAnywhere, open the Files tab.
-2. Navigate to your home directory: /home/<PA_USERNAME>/
-3. Use Upload a file and upload your ZIP (example: ProblemBank.zip).
-4. Open a Bash console from the Consoles tab.
-5. Run:
+Instead of uploading a ZIP and making manual edits, push your project to a GitHub repository and use `git` on PythonAnywhere to clone and update the site. This keeps deployments simple and repeatable.
+
+A. Create a GitHub repository and push your local project
+
+1. Create a new repo on GitHub (for example: `username/ProblemBank`).
+2. From your local project root, push your code:
+
+```bash
+# if you haven't already initialized git
+git init
+git add --all
+git commit -m "Initial commit"
+git branch -M main
+git remote add origin https://github.com/<GITHUB_USERNAME>/ProblemBank.git
+git push -u origin main
+```
+
+Replace `https://github.com/<GITHUB_USERNAME>/ProblemBank.git` with your repo URL. For private repos, consider using an SSH key (recommended) or a personal access token for HTTPS.
+
+B. Clone the repo on PythonAnywhere (recommended: SSH)
+
+SSH method (recommended):
+
+1. In a PythonAnywhere Bash console:
+
+```bash
+# generate an SSH key (if you don't have one)
+ssh-keygen -t ed25519 -C "<PA_USERNAME>@pythonanywhere" -f ~/.ssh/id_ed25519 -N ""
+cat ~/.ssh/id_ed25519.pub
+```
+
+2. Copy the printed public key and add it to your GitHub account (Settings → SSH and GPG keys).
+
+3. On PythonAnywhere, clone the repo:
 
 ```bash
 cd /home/<PA_USERNAME>
-unzip ProblemBank.zip
+git clone git@github.com:<GITHUB_USERNAME>/ProblemBank.git
 ```
 
-If the unzip creates an extra nested folder, make sure manage.py ends up at:
+HTTPS method (if you prefer):
 
-```text
-/home/<PA_USERNAME>/ProblemBank/manage.py
+```bash
+cd /home/<PA_USERNAME>
+git clone https://github.com/<GITHUB_USERNAME>/ProblemBank.git
 ```
 
-If needed, rename/move folders so this path is correct.
+If the repo is private, use a personal access token (PAT) or configure `git` credentials securely. Don't embed tokens in scripts.
+
+After cloning, the project should live at `/home/<PA_USERNAME>/ProblemBank` and contain `manage.py`.
 
 ---
 
@@ -248,36 +280,42 @@ In the browser:
 
 ---
 
-## 13) Routine Redeploy After Updates
 
-If you uploaded new code ZIP or edited files in PythonAnywhere, run:
+## 13) Routine Redeploy After Updates (git-based)
+
+When you make changes locally, push to GitHub and update PythonAnywhere with `git pull`.
+
+In a PythonAnywhere Bash console:
 
 ```bash
 workon problembank-env
 cd /home/<PA_USERNAME>/ProblemBank
 
-# Only if dependencies changed
+# fetch latest code
+git pull origin main
+
+# install any new/updated dependencies
 pip install -r requirements.txt
 
-# Only if model/schema changed
+# apply DB migrations if models changed
 python manage.py migrate
 
-# If static assets changed (CSS/JS/images)
+# update static assets if needed
 find . -maxdepth 1 -type d -name 'staticfiles_old_*' -exec rm -rf {} + 2>/dev/null || true
 mv staticfiles staticfiles_old_$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
 mkdir -p staticfiles
 chmod -R u+rwX staticfiles
 python manage.py collectstatic --noinput
 
-# If parsing/sync logic changed
+# re-sync problem bank if logic/data changed
 python manage.py sync_problem_bank --force
 
-# Final checks
+# health checks
 python manage.py check --deploy
 python manage.py sync_problem_bank
 ```
 
-Then click Reload in Web tab.
+Then go to the Web tab and click Reload.
 
 ---
 
